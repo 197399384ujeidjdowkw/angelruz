@@ -1,4 +1,4 @@
-var S={stage:localStorage.getItem('stage')||'code',email:localStorage.getItem('email')||'',token:getToken(),modules:[],company:null,messages:[],items:[{open:true}],clientName:'',clientPhone:''};
+var S={stage:localStorage.getItem('stage')||'code',email:localStorage.getItem('email')||'',token:getToken(),activationCode:localStorage.getItem('activationCode')||'',modules:[],company:null,messages:[],items:[{open:true}],clientName:'',clientPhone:''};
 function getToken(){try{return window.HalconNative?HalconNative.getToken():''}catch(e){return''}}
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function el(id){return document.getElementById(id)}
