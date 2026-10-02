@@ -1,0 +1,2 @@
+try{var saved=JSON.parse(localStorage.getItem('halconIncoming')||'[]');if(Array.isArray(saved)&&saved.length)S.messages=saved}catch(e){}
+(function(){var original=window.__incoming;window.__incoming=function(){original.apply(window,arguments);try{localStorage.setItem('halconIncoming',JSON.stringify(S.messages.slice(0,100)))}catch(e){}}})();
