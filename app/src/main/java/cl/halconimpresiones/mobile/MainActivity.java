@@ -191,6 +191,66 @@ public class MainActivity extends Activity {
       }catch(Exception e){}
     }
 
+    void centralPost(final String name,final String email){
+      new Thread(new Runnable(){ public void run(){
+        try{
+          JSONObject o=new JSONObject();o.put("email",email);o.put("deviceId",getDeviceId());o.put("deviceName","Android");
+          Resp rr=http(MASTER+name,"POST",o.toString(),"");
+          final String js="window.__api&&window.__api("+q(name)+","+rr.code+","+q(rr.body)+")";
+          w.post(new Runnable(){ public void run(){w.evaluateJavascript(js,null);}});
+        }catch(Exception e){
+          final String body="{\"ok\":false,\"message\":"+JSONObject.quote("No fue posible contactar al servidor.")+"}";
+          final String js="window.__api&&window.__api("+q(name)+",0,"+q(body)+")";
+          w.post(new Runnable(){ public void run(){w.evaluateJavascript(js,null);}});
+        }
+      }}).start();
+    }
+
+    void openSupportContact(final int index){
+      new Thread(new Runnable(){ public void run(){
+        try{
+          Resp rr=http(MASTER+"support","GET","", "");
+          JSONObject j=new JSONObject(rr.body);JSONArray a=j.optJSONArray("whatsapp");
+          if(a==null||index<0||index>=a.length())return;final String number=a.optString(index,"").replaceAll("[^0-9]","");
+          if(number.isEmpty())return;
+          runOnUiThread(new Runnable(){public void run(){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://wa.me/"+number)));}catch(Exception e){}}});
+        }catch(Exception e){}
+      }}).start();
+    }
+
+    void activateThenLogin(final String raw){
+      new Thread(new Runnable(){ public void run(){
+        try{
+          JSONObject p=new JSONObject(raw);String email=p.optString("email","");String password=p.optString("password","");String code=p.optString("controlToken","");
+          JSONObject act=new JSONObject();act.put("accessCode",code);act.put("email",email);act.put("deviceId",getDeviceId());act.put("deviceName","Android");act.put("appVersion","3.0.2");
+          Resp ar=http(MASTER+"activate","POST",act.toString(),"");
+          if(ar.code<200||ar.code>=300){sendJs("login",ar);return;}
+          JSONObject aj=new JSONObject(ar.body);if(!aj.optBoolean("ok",false)){sendJs("login",ar);return;}
+          String controlToken=aj.optString("token","");JSONObject inst=aj.optJSONObject("installation");String base=inst==null?"":inst.optString("url","");
+          if(base.isEmpty()||controlToken.isEmpty()){sendJs("login",new Resp(502,"{\"ok\":false,\"message\":\"No se pudo identificar la empresa.\"}"));return;}
+          if(!base.endsWith("/"))base+="/";String api=base+"wp-json/halcon-app/v1/";
+          getSharedPreferences(P,0).edit().putString("site_api",api).putString("control_token",controlToken).apply();
+          JSONObject lp=new JSONObject();lp.put("email",email);lp.put("password",password);lp.put("controlToken",controlToken);lp.put("deviceId",getDeviceId());lp.put("deviceName","Android");
+          Resp lr=http(api+"login","POST",lp.toString(),"");
+          if(lr.code>=200&&lr.code<300){try{JSONObject lj=new JSONObject(lr.body);if(lj.has("token"))getSharedPreferences(P,0).edit().putString("token",lj.optString("token")).apply();}catch(Exception e){}}
+          sendJs("login",lr);
+        }catch(Exception e){sendJs("login",new Resp(0,"{\"ok\":false,\"message\":\"No fue posible activar el dispositivo.\"}"));}
+      }}).start();
+    }
+
+    void sendJs(final String name,final Resp r){
+      final String js="window.__api&&window.__api("+q(name)+","+r.code+","+q(r.body)+")";
+      w.post(new Runnable(){ public void run(){w.evaluateJavascript(js,null);}});
+    }
+
+    Resp http(String url,String method,String body,String bearer)throws Exception{
+      HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();c.setRequestMethod(method);c.setConnectTimeout(15000);c.setReadTimeout(20000);
+      c.setRequestProperty("Accept","application/json");c.setRequestProperty("Content-Type","application/json; charset=utf-8");
+      if(bearer!=null&&!bearer.isEmpty())c.setRequestProperty("Authorization","Bearer "+bearer);
+      if("POST".equals(method)){c.setDoOutput(true);OutputStream os=c.getOutputStream();os.write((body==null?"{}":body).getBytes(StandardCharsets.UTF_8));os.flush();os.close();}
+      int code=c.getResponseCode();InputStream in=code>=400?c.getErrorStream():c.getInputStream();return new Resp(code,read(in));
+    }
+
     void api(final String name,final String raw,final boolean auth){
       new Thread(new Runnable(){
         public void run(){
