@@ -1,25 +1,264 @@
 package cl.halconimpresiones.mobile;
-import android.app.*;import android.os.*;import android.content.*;import android.net.Uri;import android.webkit.*;import android.provider.Settings;import java.io.*;import java.net.*;import java.nio.charset.StandardCharsets;import org.json.*;
-public class MainActivity extends Activity{
- WebView w; static final String API="https://halconimpresiones.cl/wp-json/halcon-app/v1/"; static final String P="halcon"; 
- public void onCreate(Bundle b){super.onCreate(b);w=new WebView(this);w.getSettings().setJavaScriptEnabled(true);w.getSettings().setDomStorageEnabled(true);w.addJavascriptInterface(new Bridge(),"HalconNative");w.setWebViewClient(new WebViewClient(){public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){String s=r.getUrl().getScheme();if("http".equals(s)||"https".equals(s)||"whatsapp".equals(s)){try{startActivity(new Intent(Intent.ACTION_VIEW,r.getUrl()));}catch(Exception e){}return true;}return false;}});w.loadUrl("file:///android_asset/index.html");handle(getIntent());}
- protected void onNewIntent(Intent i){super.onNewIntent(i);setIntent(i);handle(i);}
- void handle(Intent i){if(i==null)return;String a=i.getAction();if(Intent.ACTION_SEND.equals(a)||Intent.ACTION_SEND_MULTIPLE.equals(a)){String t=i.getStringExtra(Intent.EXTRA_TEXT);String js="window.__incoming&&window.__incoming("+q(t==null?"":t)+",1)";w.postDelayed(()->w.evaluateJavascript(js,null),500);}}
- class Bridge{
-  @JavascriptInterface public String getToken(){return getSharedPreferences(P,0).getString("token","");}
-  @JavascriptInterface public String getDeviceId(){String x=Settings.Secure.getString(getContentResolver(),Settings.Secure.ANDROID_ID);return x==null?"android":x;}
-  @JavascriptInterface public void login(String raw){api("login",raw,false);}
-  @JavascriptInterface public void changePassword(String raw){api("change-password",raw,true);}
-  @JavascriptInterface public void bootstrap(){api("bootstrap","",true);}
-  @JavascriptInterface public void logout(){getSharedPreferences(P,0).edit().clear().apply();}
-  @JavascriptInterface public void forgot(String email){new Thread(()->{try{JSONObject o=new JSONObject();o.put("email",email);post("forgot-password",o.toString(),false);}catch(Exception e){}}).start();}
-  @JavascriptInterface public void save(String raw){ }
-  @JavascriptInterface public void share(String kind){try{Intent i=new Intent(Intent.ACTION_SEND);i.setType("text/plain");i.putExtra(Intent.EXTRA_TEXT,"Sistema Halcón - "+kind);startActivity(Intent.createChooser(i,"Compartir"));}catch(Exception e){}}
-  void api(String name,String raw,boolean auth){new Thread(()->{try{String body=raw;if(body.isEmpty())body="{}";String r=post(name,body,auth);w.post(()->w.evaluateJavascript("window.__api&&window.__api("+q(name)+","+q(r)+")",null));}catch(Exception e){w.post(()->w.evaluateJavascript("window.__api&&window.__api("+q(name)+",0,"+q("{\"ok\":false,\"message\":\""+e.getMessage()+"\"}")+")",null));}}).start();}
-  String post(String path,String body,boolean auth)throws Exception{HttpURLConnection c=(HttpURLConnection)new URL(API+path).openConnection();c.setRequestMethod("POST".equals(path)||path.equals("login")||path.equals("change-password")||path.equals("forgot-password")?"POST":"GET");c.setConnectTimeout(15000);c.setReadTimeout(20000);c.setRequestProperty("Content-Type","application/json");if(auth){String t=getToken();if(!t.isEmpty())c.setRequestProperty("Authorization","Bearer "+t);}c.setDoOutput(true);c.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));int code=c.getResponseCode();InputStream in=code>=400?c.getErrorStream():c.getInputStream();String out=read(in);if(code>=200&&code<300){try{JSONObject j=new JSONObject(out);if(j.has("token"))getSharedPreferences(P,0).edit().putString("token",j.optString("token")).apply();}catch(Exception e){}}return code+"|"+out;}
-  String read(InputStream in)throws Exception{if(in==null)return "";BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8));StringBuilder s=new StringBuilder();String x;while((x=r.readLine())!=null)s.append(x);return s.toString();}
- }
- String getToken(){return getSharedPreferences(P,0).getString("token","");}
- String q(String s){if(s==null)s="";return JSONObject.quote(s);}
- public void onBackPressed(){if(w.canGoBack())w.goBack();else super.onBackPressed();}
+
+import android.app.*;
+import android.os.*;
+import android.content.*;
+import android.graphics.Color;
+import android.net.Uri;
+import android.provider.Settings;
+import android.view.Gravity;
+import android.view.View;
+import android.webkit.*;
+import android.widget.*;
+import java.io.*;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+import org.json.*;
+
+public class MainActivity extends Activity {
+  WebView w;
+  FrameLayout root;
+  View splash;
+  static final String API="https://halconimpresiones.cl/wp-json/halcon-app/v1/";
+  static final String P="halcon";
+
+  public void onCreate(Bundle b){
+    super.onCreate(b);
+
+    root=new FrameLayout(this);
+    root.setBackgroundColor(Color.WHITE);
+
+    w=new WebView(this);
+    w.setBackgroundColor(Color.WHITE);
+    w.setAlpha(0f);
+    WebSettings s=w.getSettings();
+    s.setJavaScriptEnabled(true);
+    s.setDomStorageEnabled(true);
+    s.setAllowFileAccess(true);
+    s.setAllowContentAccess(true);
+    s.setMediaPlaybackRequiresUserGesture(false);
+
+    w.addJavascriptInterface(new Bridge(),"HalconNative");
+
+    LinearLayout loading=new LinearLayout(this);
+    loading.setOrientation(LinearLayout.VERTICAL);
+    loading.setGravity(Gravity.CENTER);
+    loading.setPadding(40,40,40,40);
+    loading.setBackgroundColor(Color.WHITE);
+
+    ImageView logo=new ImageView(this);
+    logo.setImageResource(R.drawable.icon_halcon);
+    logo.setAdjustViewBounds(true);
+    LinearLayout.LayoutParams lpLogo=new LinearLayout.LayoutParams(240,240);
+    logo.setLayoutParams(lpLogo);
+
+    TextView title=new TextView(this);
+    title.setText("SISTEMA HALCÓN");
+    title.setTextSize(24);
+    title.setTextColor(Color.rgb(112,72,184));
+    title.setGravity(Gravity.CENTER);
+    title.setPadding(0,24,0,6);
+
+    TextView sub=new TextView(this);
+    sub.setText("Gestiona · Vende · Conecta");
+    sub.setTextSize(13);
+    sub.setTextColor(Color.DKGRAY);
+    sub.setGravity(Gravity.CENTER);
+
+    loading.addView(logo);
+    loading.addView(title);
+    loading.addView(sub);
+    splash=loading;
+
+    root.addView(w,new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,FrameLayout.LayoutParams.MATCH_PARENT));
+    root.addView(loading,new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,FrameLayout.LayoutParams.MATCH_PARENT));
+    setContentView(root);
+
+    w.setWebViewClient(new WebViewClient(){
+      @Override public void onPageFinished(WebView v,String url){
+        super.onPageFinished(v,url);
+        w.animate().alpha(1f).setDuration(220).start();
+        if(splash!=null){
+          splash.animate().alpha(0f).setDuration(180).withEndAction(new Runnable(){
+            public void run(){ root.removeView(splash); splash=null; }
+          }).start();
+        }
+      }
+      @Override public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err){
+        if(req!=null && req.isForMainFrame()){
+          showNativeError("No se pudo cargar la interfaz. Revisa la conexión e intenta nuevamente.");
+        }
+      }
+      @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){
+        String scheme=r.getUrl().getScheme();
+        if("http".equals(scheme)||"https".equals(scheme)||"whatsapp".equals(scheme)){
+          try{startActivity(new Intent(Intent.ACTION_VIEW,r.getUrl()));}catch(Exception e){}
+          return true;
+        }
+        return false;
+      }
+    });
+
+    w.loadUrl("file:///android_asset/index.html");
+    handle(getIntent());
+  }
+
+  void showNativeError(String message){
+    runOnUiThread(new Runnable(){
+      public void run(){
+        LinearLayout box=new LinearLayout(MainActivity.this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+        box.setPadding(40,40,40,40);
+        box.setBackgroundColor(Color.WHITE);
+
+        ImageView logo=new ImageView(MainActivity.this);
+        logo.setImageResource(R.drawable.icon_halcon);
+        logo.setAdjustViewBounds(true);
+        logo.setLayoutParams(new LinearLayout.LayoutParams(180,180));
+
+        TextView t=new TextView(MainActivity.this);
+        t.setText("Sistema Halcón");
+        t.setTextSize(22);
+        t.setTextColor(Color.rgb(112,72,184));
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(0,18,0,10);
+
+        TextView m=new TextView(MainActivity.this);
+        m.setText(message);
+        m.setTextSize(14);
+        m.setTextColor(Color.DKGRAY);
+        m.setGravity(Gravity.CENTER);
+
+        Button b=new Button(MainActivity.this);
+        b.setText("Reintentar");
+        b.setOnClickListener(new View.OnClickListener(){
+          public void onClick(View v){ recreate(); }
+        });
+
+        box.addView(logo);
+        box.addView(t);
+        box.addView(m);
+        box.addView(b);
+
+        root.removeAllViews();
+        root.addView(box,new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,FrameLayout.LayoutParams.MATCH_PARENT));
+      }
+    });
+  }
+
+  protected void onNewIntent(Intent i){
+    super.onNewIntent(i);
+    setIntent(i);
+    handle(i);
+  }
+
+  void handle(Intent i){
+    if(i==null)return;
+    String a=i.getAction();
+    if(Intent.ACTION_SEND.equals(a)||Intent.ACTION_SEND_MULTIPLE.equals(a)){
+      String t=i.getStringExtra(Intent.EXTRA_TEXT);
+      final String js="window.__incoming&&window.__incoming("+q(t==null?"":t)+",1)";
+      w.postDelayed(new Runnable(){ public void run(){ w.evaluateJavascript(js,null); }},700);
+    }
+  }
+
+  class Resp{
+    int code; String body;
+    Resp(int c,String b){code=c;body=b;}
+  }
+
+  class Bridge{
+    @JavascriptInterface public String getToken(){return getSharedPreferences(P,0).getString("token","");}
+    @JavascriptInterface public String getDeviceId(){
+      String x=Settings.Secure.getString(getContentResolver(),Settings.Secure.ANDROID_ID);
+      return x==null?"android":x;
+    }
+    @JavascriptInterface public void login(String raw){api("login",raw,false);}
+    @JavascriptInterface public void changePassword(String raw){api("change-password",raw,true);}
+    @JavascriptInterface public void bootstrap(){api("bootstrap","{}",true);}
+    @JavascriptInterface public void logout(){getSharedPreferences(P,0).edit().clear().apply();}
+    @JavascriptInterface public void forgot(String email){
+      try{
+        JSONObject o=new JSONObject();
+        o.put("email",email);
+        api("forgot-password",o.toString(),false);
+      }catch(Exception e){}
+    }
+    @JavascriptInterface public void save(String raw){api("quotes",raw,true);}
+    @JavascriptInterface public void share(String kind){
+      try{
+        Intent i=new Intent(Intent.ACTION_SEND);
+        i.setType("text/plain");
+        i.putExtra(Intent.EXTRA_TEXT,"Sistema Halcón - "+kind);
+        startActivity(Intent.createChooser(i,"Compartir"));
+      }catch(Exception e){}
+    }
+
+    void api(final String name,final String raw,final boolean auth){
+      new Thread(new Runnable(){
+        public void run(){
+          try{
+            Resp r=request(name,raw==null?"{}":raw,auth);
+            final String js="window.__api&&window.__api("+q(name)+","+r.code+","+q(r.body)+")";
+            w.post(new Runnable(){ public void run(){ w.evaluateJavascript(js,null); }});
+          }catch(Exception e){
+            final String body="{\"ok\":false,\"message\":"+JSONObject.quote(e.getMessage()==null?"Error de conexión":e.getMessage())+"}";
+            final String js="window.__api&&window.__api("+q(name)+",0,"+q(body)+")";
+            w.post(new Runnable(){ public void run(){ w.evaluateJavascript(js,null); }});
+          }
+        }
+      }).start();
+    }
+
+    Resp request(String path,String body,boolean auth)throws Exception{
+      boolean post=path.equals("login")||path.equals("change-password")||path.equals("forgot-password")||path.equals("quotes");
+      HttpURLConnection c=(HttpURLConnection)new URL(API+path).openConnection();
+      c.setRequestMethod(post?"POST":"GET");
+      c.setConnectTimeout(15000);
+      c.setReadTimeout(20000);
+      c.setRequestProperty("Accept","application/json");
+      c.setRequestProperty("Content-Type","application/json; charset=utf-8");
+      if(auth){
+        String t=getToken();
+        if(!t.isEmpty())c.setRequestProperty("Authorization","Bearer "+t);
+      }
+      if(post){
+        c.setDoOutput(true);
+        OutputStream os=c.getOutputStream();
+        os.write(body.getBytes(StandardCharsets.UTF_8));
+        os.flush();
+        os.close();
+      }
+      int code=c.getResponseCode();
+      InputStream in=code>=400?c.getErrorStream():c.getInputStream();
+      String out=read(in);
+      if(code>=200&&code<300){
+        try{
+          JSONObject j=new JSONObject(out);
+          if(j.has("token"))getSharedPreferences(P,0).edit().putString("token",j.optString("token")).apply();
+        }catch(Exception e){}
+      }
+      return new Resp(code,out);
+    }
+
+    String read(InputStream in)throws Exception{
+      if(in==null)return "";
+      BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8));
+      StringBuilder s=new StringBuilder();
+      String x;
+      while((x=r.readLine())!=null)s.append(x);
+      return s.toString();
+    }
+  }
+
+  String q(String s){
+    if(s==null)s="";
+    return JSONObject.quote(s);
+  }
+
+  @Override public void onBackPressed(){
+    if(w!=null && w.canGoBack())w.goBack();
+    else super.onBackPressed();
+  }
 }
