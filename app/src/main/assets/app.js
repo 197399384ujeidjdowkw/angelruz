@@ -28,7 +28,7 @@ function auth(){
   };
   byId('forgot').onclick=function(){try{HalconNative.forgot(S.email||byId('email').value);}catch(e){alert('No fue posible iniciar la recuperación.');}};
  }else if(S.stage==='code'){
-  a.innerHTML='<div class="small">Ingresa el código entregado por Sistema Halcón. La app identificará automáticamente la empresa correspondiente.</div><label class="field"><span>Código de activación</span><input id="code" autocomplete="one-time-code" placeholder="APP-XXXX-XXXX-XXXX-XXXX"></label><button class="primary" id="activate" type="button">Validar acceso</button><button class="link" id="back" type="button">Volver</button>';
+  a.innerHTML='<div class="small">Ingresa el código de activación entregado por Sistema Halcón. La aplicación identificará automáticamente la empresa correspondiente.</div><label class="field"><span>Código de activación</span><input id="code" autocomplete="one-time-code" placeholder="APP-XXXX-XXXX-XXXX-XXXX"></label><button class="primary" id="activate" type="button">Validar activación</button><button class="backCentered" id="back" type="button">Volver</button>';
   byId('activate').onclick=function(){
    var c=byId('code').value.toUpperCase().replace(/^\s+|\s+$/g,'');
    if(!/^APP-[A-Z0-9]{4}(-[A-Z0-9]{4}){3}$/.test(c)){alert('Revisa el código de acceso.');return;}
