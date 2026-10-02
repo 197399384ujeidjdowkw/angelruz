@@ -19,7 +19,7 @@ public class MainActivity extends Activity {
   WebView w;
   FrameLayout root;
   View splash;
-  static final String API="https://halconimpresiones.cl/wp-json/halcon-app/v1/";
+  static final String MASTER="https://halconimpresiones.cl/wp-json/halcon-control/v3/app/";
   static final String P="halcon";
 
   public void onCreate(Bundle b){
@@ -33,7 +33,7 @@ public class MainActivity extends Activity {
     w.setAlpha(0f);
     WebSettings s=w.getSettings();
     s.setJavaScriptEnabled(true);
-    s.setDomStorageEnabled(true);
+    s.setDomStorageEnabled(true);\n    s.setDefaultTextEncodingName("utf-8");
     s.setAllowFileAccess(true);
     s.setAllowContentAccess(true);
     s.setMediaPlaybackRequiresUserGesture(false);
