@@ -26,7 +26,7 @@ function auth(){
    if(!email||!pw){alert('Completa correo y contraseña.');return;}
    S.email=email;S.pw=pw;localStorage.setItem('email',email);S.stage='code';render();
   };
-  byId('forgot').onclick=function(){try{HalconNative.forgot(S.email||byId('email').value);}catch(e){alert('No fue posible iniciar la recuperación.');}};
+  byId('forgot').onclick=function(){var e=S.email||byId('email').value;if(!e){alert('Ingresa primero tu correo registrado.');return;}try{HalconNative.forgot(e);}catch(err){alert('No fue posible iniciar la recuperación.');}};byId('helpOpen').onclick=function(){var box=byId('helpBox');box.className=box.className.indexOf('on')>=0?'helpBox':'helpBox on';var h=byId('helpEmail');if(h&&!h.value)h.value=byId('email').value||S.email||'';};byId('helpSend').onclick=function(){var e=byId('helpEmail').value.replace(/^\s+|\s+$/g,'');if(!e||e.indexOf('@')<1){alert('Ingresa el correo registrado.');return;}try{HalconNative.help(e);}catch(err){alert('No fue posible enviar la solicitud de ayuda.');}};byId('wa1').onclick=function(){try{HalconNative.openSupport(0);}catch(e){}};byId('wa2').onclick=function(){try{HalconNative.openSupport(1);}catch(e){}};
  }else if(S.stage==='code'){
   a.innerHTML='<div class="small">Ingresa el código de activación entregado por Sistema Halcón. La aplicación identificará automáticamente la empresa correspondiente.</div><label class="field"><span>Código de activación</span><input id="code" autocomplete="one-time-code" placeholder="APP-XXXX-XXXX-XXXX-XXXX"></label><button class="primary" id="activate" type="button">Validar activación</button><button class="backCentered" id="back" type="button">Volver</button>';
   byId('activate').onclick=function(){
