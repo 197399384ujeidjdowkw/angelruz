@@ -269,7 +269,7 @@ public class MainActivity extends Activity {
 
     Resp request(String path,String body,boolean auth)throws Exception{
       boolean post=path.equals("login")||path.equals("change-password")||path.equals("forgot-password")||path.equals("quotes");
-      HttpURLConnection c=(HttpURLConnection)new URL(API+path).openConnection();
+      String site=getSharedPreferences(P,0).getString("site_api","");if(site.isEmpty())throw new Exception("Empresa no vinculada");HttpURLConnection c=(HttpURLConnection)new URL(site+path).openConnection();
       c.setRequestMethod(post?"POST":"GET");
       c.setConnectTimeout(15000);
       c.setReadTimeout(20000);
