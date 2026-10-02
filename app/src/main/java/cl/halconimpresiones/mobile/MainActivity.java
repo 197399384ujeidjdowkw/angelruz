@@ -178,7 +178,7 @@ public class MainActivity extends Activity {
       String x=Settings.Secure.getString(getContentResolver(),Settings.Secure.ANDROID_ID);
       return x==null?"android":x;
     }
-    @JavascriptInterface public void activateCode(String code){activateCodeOnly(code);}\n    @JavascriptInterface public void accountState(String email){accountStateOnly(email);}\n    @JavascriptInterface public void beginAccount(String email){try{JSONObject p=new JSONObject();p.put("email",email);p.put("password","");activateThenLogin(p.toString());}catch(Exception e){}}\n    @JavascriptInterface public void login(String raw){activateThenLogin(raw);}
+    @JavascriptInterface public void activateCode(String code){activateCodeOnly(code);}\n    @JavascriptInterface public void accountState(String email){accountStateOnly(email);}\n    @JavascriptInterface public void beginAccount(String email){loginWithStoredActivation(email,"");}\n    @JavascriptInterface public void login(String raw){activateThenLogin(raw);}
     @JavascriptInterface public void changePassword(String raw){api("change-password",raw,true);}
     @JavascriptInterface public void bootstrap(){api("bootstrap","{}",true);}
     @JavascriptInterface public void logout(){getSharedPreferences(P,0).edit().clear().apply();}
@@ -222,28 +222,93 @@ public class MainActivity extends Activity {
       }}).start();
     }
 
-    void activateThenLogin(final String raw){
+    void activateCodeOnly(final String code){
       new Thread(new Runnable(){ public void run(){
         try{
-          JSONObject p=new JSONObject(raw);String email=p.optString("email","");String password=p.optString("password","");String code=p.optString("controlToken","");
-          android.content.SharedPreferences pref=getSharedPreferences(P,0);
-          String api=pref.getString("site_api","");String controlToken=pref.getString("control_token","");String activatedEmail=pref.getString("activated_email","");
-          if(api.isEmpty()||controlToken.isEmpty()||!email.equalsIgnoreCase(activatedEmail)){
-            JSONObject act=new JSONObject();act.put("accessCode",code);act.put("email",email);act.put("deviceId",getDeviceId());act.put("deviceName","Android");act.put("appVersion","3.0.2");
-            Resp ar=http(MASTER+"activate","POST",act.toString(),"");
-            if(ar.code<200||ar.code>=300){sendJs("login",ar);return;}
-            JSONObject aj=new JSONObject(ar.body);if(!aj.optBoolean("ok",false)){sendJs("login",ar);return;}
-            controlToken=aj.optString("token","");JSONObject inst=aj.optJSONObject("installation");String base=inst==null?"":inst.optString("url","");
-            if(base.isEmpty()||controlToken.isEmpty()){sendJs("login",new Resp(502,"{\"ok\":false,\"message\":\"No se pudo identificar la empresa.\"}"));return;}
-            if(!base.endsWith("/"))base+="/";api=base+"wp-json/halcon-app/v1/";
-            pref.edit().putString("site_api",api).putString("control_token",controlToken).putString("activated_email",email).apply();
+          JSONObject act=new JSONObject();
+          act.put("accessCode",code);
+          act.put("email","");
+          act.put("deviceId",getDeviceId());
+          act.put("deviceName","Android");
+          act.put("appVersion","3.0.5");
+          Resp ar=http(MASTER+"activate","POST",act.toString(),"");
+          if(ar.code<200||ar.code>=300){sendJs("activate",ar);return;}
+          JSONObject aj=new JSONObject(ar.body);
+          if(!aj.optBoolean("ok",false)){sendJs("activate",ar);return;}
+          String controlToken=aj.optString("token","");
+          JSONObject inst=aj.optJSONObject("installation");
+          String base=inst==null?"":inst.optString("url","");
+          if(base.isEmpty()||controlToken.isEmpty()){
+            sendJs("activate",new Resp(502,"{\"ok\":false,\"message\":\"No se pudo identificar la empresa.\"}"));
+            return;
           }
-          JSONObject lp=new JSONObject();lp.put("email",email);lp.put("password",password);lp.put("controlToken",controlToken);lp.put("deviceId",getDeviceId());lp.put("deviceName","Android");
-          Resp lr=http(api+"login","POST",lp.toString(),"");
-          if(lr.code>=200&&lr.code<300){try{JSONObject lj=new JSONObject(lr.body);if(lj.has("token"))pref.edit().putString("token",lj.optString("token")).apply();}catch(Exception e){}}
-          sendJs("login",lr);
-        }catch(Exception e){sendJs("login",new Resp(0,"{\"ok\":false,\"message\":\"No fue posible activar el dispositivo.\"}"));}
+          if(!base.endsWith("/"))base+="/";
+          String api=base+"wp-json/halcon-app/v1/";
+          getSharedPreferences(P,0).edit().putString("site_api",api).putString("control_token",controlToken).putString("activation_code",code).apply();
+          sendJs("activate",ar);
+        }catch(Exception e){
+          sendJs("activate",new Resp(0,"{\"ok\":false,\"message\":\"No fue posible validar la licencia.\"}"));
+        }
       }}).start();
+    }
+
+    void accountStateOnly(final String email){
+      new Thread(new Runnable(){ public void run(){
+        try{
+          android.content.SharedPreferences pref=getSharedPreferences(P,0);
+          String api=pref.getString("site_api","");
+          String controlToken=pref.getString("control_token","");
+          if(api.isEmpty()||controlToken.isEmpty()){
+            sendJs("account-state",new Resp(400,"{\"ok\":false,\"message\":\"Primero valida la licencia.\"}"));
+            return;
+          }
+          JSONObject p=new JSONObject();
+          p.put("email",email);
+          p.put("controlToken",controlToken);
+          sendJs("account-state",http(api+"account-state","POST",p.toString(),""));
+        }catch(Exception e){
+          sendJs("account-state",new Resp(0,"{\"ok\":false,\"message\":\"No fue posible consultar el correo.\"}"));
+        }
+      }}).start();
+    }
+
+    void loginWithStoredActivation(final String email,final String password){
+      new Thread(new Runnable(){ public void run(){
+        try{
+          android.content.SharedPreferences pref=getSharedPreferences(P,0);
+          String api=pref.getString("site_api","");
+          String controlToken=pref.getString("control_token","");
+          if(api.isEmpty()||controlToken.isEmpty()){
+            sendJs("login",new Resp(400,"{\"ok\":false,\"message\":\"Primero valida la licencia.\"}"));
+            return;
+          }
+          JSONObject lp=new JSONObject();
+          lp.put("email",email);
+          lp.put("password",password);
+          lp.put("controlToken",controlToken);
+          lp.put("deviceId",getDeviceId());
+          lp.put("deviceName","Android");
+          Resp lr=http(api+"login","POST",lp.toString(),"");
+          if(lr.code>=200&&lr.code<300){
+            try{
+              JSONObject lj=new JSONObject(lr.body);
+              if(lj.has("token"))pref.edit().putString("token",lj.optString("token")).putString("activated_email",email).apply();
+            }catch(Exception e){}
+          }
+          sendJs("login",lr);
+        }catch(Exception e){
+          sendJs("login",new Resp(0,"{\"ok\":false,\"message\":\"No fue posible ingresar.\"}"));
+        }
+      }}).start();
+    }
+
+    void activateThenLogin(final String raw){
+      try{
+        JSONObject p=new JSONObject(raw);
+        loginWithStoredActivation(p.optString("email",""),p.optString("password",""));
+      }catch(Exception e){
+        sendJs("login",new Resp(0,"{\"ok\":false,\"message\":\"Solicitud de acceso invalida.\"}"));
+      }
     }
 
     void sendJs(final String name,final Resp r){
