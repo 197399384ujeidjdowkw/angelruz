@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 <uses-permission android:name="android.permission.INTERNET"/>
-<application android:theme="@style/AppTheme" android:label="Sistema Halcón" android:usesCleartextTraffic="false" android:allowBackup="true">
+<uses-permission android:name="android.permission.CAMERA"/>
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+<uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+<uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+<application android:theme="@style/AppTheme" android:label="Sistema Halcón" android:icon="@drawable/icon_halcon" android:roundIcon="@drawable/icon_halcon" android:usesCleartextTraffic="false" android:allowBackup="true">
 <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="unspecified" android:configChanges="orientation|screenSize|keyboardHidden">
 <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
 <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="text/plain"/></intent-filter>
