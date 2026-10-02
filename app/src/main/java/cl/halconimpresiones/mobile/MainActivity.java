@@ -178,7 +178,10 @@ public class MainActivity extends Activity {
       String x=Settings.Secure.getString(getContentResolver(),Settings.Secure.ANDROID_ID);
       return x==null?"android":x;
     }
-    @JavascriptInterface public void activateCode(String code){activateCodeOnly(code);}\n    @JavascriptInterface public void accountState(String email){accountStateOnly(email);}\n    @JavascriptInterface public void beginAccount(String email){loginWithStoredActivation(email,"");}\n    @JavascriptInterface public void login(String raw){activateThenLogin(raw);}
+    @JavascriptInterface public void activateCode(String code){activateCodeOnly(code);}
+    @JavascriptInterface public void accountState(String email){accountStateOnly(email);}
+    @JavascriptInterface public void beginAccount(String email){loginWithStoredActivation(email,"");}
+    @JavascriptInterface public void login(String raw){activateThenLogin(raw);}
     @JavascriptInterface public void changePassword(String raw){api("change-password",raw,true);}
     @JavascriptInterface public void bootstrap(){api("bootstrap","{}",true);}
     @JavascriptInterface public void logout(){getSharedPreferences(P,0).edit().clear().apply();}
