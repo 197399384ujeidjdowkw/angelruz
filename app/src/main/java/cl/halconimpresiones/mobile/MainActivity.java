@@ -179,8 +179,8 @@ public class MainActivity extends Activity {
       return x==null?"android":x;
     }
     @JavascriptInterface public void activateCode(String code){activateCodeOnly(code);}
-    @JavascriptInterface public void accountState(String email){accountStateOnly(email);}
-    @JavascriptInterface public void beginAccount(String email){loginWithStoredActivation(email,"");}
+    @JavascriptInterface public void probeAccount(String email){probeAccountNative(email);}
+    @JavascriptInterface public void loginExisting(String email,String password){loginWithStoredActivation(email,password);}
     @JavascriptInterface public void login(String raw){activateThenLogin(raw);}
     @JavascriptInterface public void changePassword(String raw){api("change-password",raw,true);}
     @JavascriptInterface public void bootstrap(){api("bootstrap","{}",true);}
@@ -255,22 +255,51 @@ public class MainActivity extends Activity {
       }}).start();
     }
 
-    void accountStateOnly(final String email){
+    void probeAccountNative(final String email){
       new Thread(new Runnable(){ public void run(){
         try{
           android.content.SharedPreferences pref=getSharedPreferences(P,0);
           String api=pref.getString("site_api","");
           String controlToken=pref.getString("control_token","");
           if(api.isEmpty()||controlToken.isEmpty()){
-            sendJs("account-state",new Resp(400,"{\"ok\":false,\"message\":\"Primero valida la licencia.\"}"));
+            sendJs("probe",new Resp(400,"{\"ok\":false,\"message\":\"Primero valida la licencia.\"}"));
             return;
           }
           JSONObject p=new JSONObject();
           p.put("email",email);
           p.put("controlToken",controlToken);
-          sendJs("account-state",http(api+"account-state","POST",p.toString(),""));
+          Resp state=http(api+"account-state","POST",p.toString(),"");
+          if(state.code>=200&&state.code<300){
+            JSONObject sj=new JSONObject(state.body);
+            String mode="password";
+            if("create_password".equals(sj.optString("state","")))mode="create";
+            JSONObject out=new JSONObject();
+            out.put("ok",true);
+            out.put("mode",mode);
+            if("create".equals(mode)){
+              JSONObject lp=new JSONObject();
+              lp.put("email",email);
+              lp.put("password","");
+              lp.put("controlToken",controlToken);
+              lp.put("deviceId",getDeviceId());
+              lp.put("deviceName","Android");
+              Resp lr=http(api+"login","POST",lp.toString(),"");
+              if(lr.code>=200&&lr.code<300){
+                JSONObject lj=new JSONObject(lr.body);
+                String tok=lj.optString("token","");
+                if(!tok.isEmpty())pref.edit().putString("token",tok).putString("activated_email",email).apply();
+                out.put("token",tok);
+              }else{
+                sendJs("probe",lr);
+                return;
+              }
+            }
+            sendJs("probe",new Resp(200,out.toString()));
+            return;
+          }
+          sendJs("probe",state);
         }catch(Exception e){
-          sendJs("account-state",new Resp(0,"{\"ok\":false,\"message\":\"No fue posible consultar el correo.\"}"));
+          sendJs("probe",new Resp(0,"{\"ok\":false,\"message\":\"No fue posible consultar la cuenta.\"}"));
         }
       }}).start();
     }
