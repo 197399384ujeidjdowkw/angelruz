@@ -1,12 +1,12 @@
 function auth(){
  if(S.stage==='code'){
   set(shell('<div class="small">Ingresa la licencia entregada por Sistema Halcón. También se aceptan códigos APP antiguos.</div><label class="field"><span>Licencia / código de activación</span><input id="code" autocomplete="one-time-code" placeholder="HALCON-..."></label><button class="primary" id="activate">Validar activación</button><div id="status" class="statusLine"></div>'));
-  el('activate').onclick=function(){var c=el('code').value.trim().toUpperCase();if(c.length<8){alert('Ingresa una licencia o código válido.');return}busy(this,true,'Validando…');el('status').textContent='Comprobando empresa y licencia…';try{HalconNative.activateCode(c)}catch(e){busy(this,false);alert('No fue posible iniciar la validación.')}};
+  el('activate').onclick=function(){var c=el('code').value.trim().toUpperCase();if(c.length<8){alert('Ingresa una licencia o código válido.');return}busy(this,true,'Validando…');el('status').textContent='Comprobando empresa y licencia…';try{S.activationCode=c;localStorage.setItem('activationCode',c);S.stage='email';localStorage.setItem('stage','email');render()}catch(e){busy(this,false);alert('No fue posible continuar.')}};
   return;
  }
  if(S.stage==='email'){
   set(shell('<div class="small">Empresa validada. Ahora identifica tu cuenta.</div><label class="field"><span>Correo registrado</span><input id="email" type="email" value="'+esc(S.email)+'"></label><button class="primary" id="continueEmail">Continuar</button><button class="helpBtn" id="helpOpen">¿Necesitas ayuda para ingresar?</button><div class="helpBox" id="helpBox"><p>Escribe tu correo registrado y presiona Pedir ayuda.</p><button class="primary" id="helpSend">Pedir ayuda</button><div class="waRow"><button class="waBtn" id="wa1">WhatsApp 1</button><button class="waBtn" id="wa2">WhatsApp 2</button></div></div>'));
-  el('continueEmail').onclick=function(){var e=el('email').value.trim();if(e.indexOf('@')<1){alert('Ingresa el correo registrado.');return}S.email=e;localStorage.setItem('email',e);busy(this,true,'Consultando…');HalconNative.accountState(e)};
+  el('continueEmail').onclick=function(){var e=el('email').value.trim();if(e.indexOf('@')<1){alert('Ingresa el correo registrado.');return}S.email=e;localStorage.setItem('email',e);busy(this,true,'Consultando…');HalconNative.login(JSON.stringify({email:e,password:'',controlToken:S.activationCode}))};
   el('helpOpen').onclick=function(){el('helpBox').className=el('helpBox').className.indexOf('on')>=0?'helpBox':'helpBox on'};
   el('helpSend').onclick=function(){var e=el('email').value.trim();if(e.indexOf('@')<1){alert('Ingresa primero tu correo registrado.');return}HalconNative.help(e)};
   el('wa1').onclick=function(){HalconNative.openSupport(0)};el('wa2').onclick=function(){HalconNative.openSupport(1)};
