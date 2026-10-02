@@ -233,7 +233,7 @@ public class MainActivity extends Activity {
           act.put("email","");
           act.put("deviceId",getDeviceId());
           act.put("deviceName","Android");
-          act.put("appVersion","3.0.5");
+          act.put("appVersion","3.0.6");
           Resp ar=http(MASTER+"activate","POST",act.toString(),"");
           if(ar.code<200||ar.code>=300){sendJs("activate",ar);return;}
           JSONObject aj=new JSONObject(ar.body);
