@@ -174,17 +174,13 @@ public class MainActivity extends Activity {
       String x=Settings.Secure.getString(getContentResolver(),Settings.Secure.ANDROID_ID);
       return x==null?"android":x;
     }
-    @JavascriptInterface public void login(String raw){api("login",raw,false);}
+    @JavascriptInterface public void login(String raw){activateThenLogin(raw);}
     @JavascriptInterface public void changePassword(String raw){api("change-password",raw,true);}
     @JavascriptInterface public void bootstrap(){api("bootstrap","{}",true);}
     @JavascriptInterface public void logout(){getSharedPreferences(P,0).edit().clear().apply();}
-    @JavascriptInterface public void forgot(String email){
-      try{
-        JSONObject o=new JSONObject();
-        o.put("email",email);
-        api("forgot-password",o.toString(),false);
-      }catch(Exception e){}
-    }
+    @JavascriptInterface public void forgot(String email){ centralPost("forgot",email); }
+    @JavascriptInterface public void help(String email){ centralPost("help",email); }
+    @JavascriptInterface public void openSupport(int index){ openSupportContact(index); }
     @JavascriptInterface public void save(String raw){api("quotes",raw,true);}
     @JavascriptInterface public void share(String kind){
       try{
