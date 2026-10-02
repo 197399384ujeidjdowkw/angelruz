@@ -159,7 +159,10 @@ public class MainActivity extends Activity {
     String a=i.getAction();
     if(Intent.ACTION_SEND.equals(a)||Intent.ACTION_SEND_MULTIPLE.equals(a)){
       String t=i.getStringExtra(Intent.EXTRA_TEXT);
-      final String js="window.__incoming&&window.__incoming("+q(t==null?"":t)+",1)";
+      String sender=i.getStringExtra(Intent.EXTRA_SUBJECT);String meta=((t==null?"":t)+" "+(sender==null?"":sender)).toLowerCase();String source="compartido";
+      try{Uri ref=getReferrer();if(ref!=null)meta+=" "+String.valueOf(ref.getHost()).toLowerCase();}catch(Exception e){}
+      if(meta.contains("telegram")||meta.contains("t.me"))source="telegram";else if(meta.contains("messenger")||meta.contains("m.me")||meta.contains("facebook"))source="messenger";else if(meta.contains("instagram"))source="instagram";else if(meta.contains("tiktok"))source="tiktok";else if(meta.contains("whatsapp")||meta.contains("wa.me"))source="whatsapp";
+      final String js="window.__incoming&&window.__incoming("+q(t==null?"":t)+",1,"+q(source)+","+q(sender==null?"":sender)+")";
       w.postDelayed(new Runnable(){ public void run(){ w.evaluateJavascript(js,null); }},700);
     }
   }
