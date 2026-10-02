@@ -18,7 +18,7 @@ function auth(){
  setHtml('<div class="screen"><div class="card"><div class="logo">SISTEMA HALCÓN</div><div class="sub">Gestiona · Vende · Conecta</div><div id="auth"></div><div class="brandline"></div><div class="sub foot"><a href="https://halconimpresiones.cl/empresas">Sistema Halcón</a> · Gestiona · Vende · Conecta<br><a href="https://carper.cl">Carper Chile</a> · Ejecución Comercial</div></div></div>');
  var a=byId('auth');
  if(S.stage==='login'){
-  a.innerHTML='<label class="field"><span>Correo</span><input id="email" type="email" value="'+esc(S.email)+'"></label><label class="field"><span>Contraseña</span><div class="pass"><input id="pw" type="password"><button id="eye" type="button">◉</button></div></label><button class="link" id="forgot" type="button">¿Olvidaste tu contraseña?</button><button class="primary" id="go" type="button">Ingresar</button>';
+  a.innerHTML='<label class="field"><span>Correo</span><input id="email" type="email" value="'+esc(S.email)+'"></label><label class="field"><span>Contraseña</span><div class="pass"><input id="pw" type="password"><button id="eye" class="eyeBtn" type="button" aria-label="Mostrar contraseña"></button></div></label><button class="link" id="forgot" type="button">¿Olvidaste tu contraseña?</button><button class="primary" id="go" type="button">Ingresar</button>';
   holdPassword('pw','eye');
   byId('go').onclick=function(){
    var email=byId('email').value.replace(/^\s+|\s+$/g,'');
@@ -36,7 +36,7 @@ function auth(){
   };
   byId('back').onclick=function(){S.stage='login';render();};
  }else{
-  a.innerHTML='<div class="small">Crea tu contraseña definitiva.</div><label class="field"><span>Nueva contraseña</span><div class="pass"><input id="np" type="password"><button id="ne" type="button">◉</button></div></label><label class="field"><span>Repetir contraseña</span><input id="cp" type="password"></label><button class="primary" id="savepw" type="button">Crear contraseña</button>';
+  a.innerHTML='<div class="small">Crea tu contraseña definitiva.</div><label class="field"><span>Nueva contraseña</span><div class="pass"><input id="np" type="password"><button id="ne" class="eyeBtn" type="button" aria-label="Mostrar contraseña"></button></div></label><label class="field"><span>Repetir contraseña</span><input id="cp" type="password"></label><button class="primary" id="savepw" type="button">Crear contraseña</button>';
   holdPassword('np','ne');
   byId('savepw').onclick=function(){
    var p=byId('np').value,q=byId('cp').value;
