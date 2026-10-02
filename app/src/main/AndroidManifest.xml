@@ -12,5 +12,5 @@
 <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="application/*"/></intent-filter>
 <intent-filter><action android:name="android.intent.action.SEND_MULTIPLE"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="*/*"/></intent-filter>
 </activity>
-<provider android:name=".ShareFileProvider" android:authorities="cl.halconimpresiones.mobile.files" android:exported="false" android:grantUriPermissions="true"/>
+
 </application></manifest>
