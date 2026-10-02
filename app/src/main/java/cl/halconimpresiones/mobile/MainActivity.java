@@ -33,7 +33,8 @@ public class MainActivity extends Activity {
     w.setAlpha(0f);
     WebSettings s=w.getSettings();
     s.setJavaScriptEnabled(true);
-    s.setDomStorageEnabled(true);\n    s.setDefaultTextEncodingName("utf-8");
+    s.setDomStorageEnabled(true);
+    s.setDefaultTextEncodingName("utf-8");
     s.setAllowFileAccess(true);
     s.setAllowContentAccess(true);
     s.setMediaPlaybackRequiresUserGesture(false);
