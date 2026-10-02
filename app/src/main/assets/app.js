@@ -93,6 +93,8 @@ window.__api=function(name,status,raw){
  try{
   var d={};try{d=JSON.parse(raw||'{}');}catch(e){}
   if(status>=200&&status<300&&d.ok){
+   if(name==='help'){alert(d.message||'Solicitud enviada.');return;}
+   if(name==='forgot'){alert(d.message||'Si el correo está registrado, recibirás instrucciones.');return;}
    if(name==='login'){
     if(d.token)S.token=d.token;
     S.stage=d.forcePasswordChange?'password':'ready';
