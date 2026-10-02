@@ -223,17 +223,21 @@ public class MainActivity extends Activity {
       new Thread(new Runnable(){ public void run(){
         try{
           JSONObject p=new JSONObject(raw);String email=p.optString("email","");String password=p.optString("password","");String code=p.optString("controlToken","");
-          JSONObject act=new JSONObject();act.put("accessCode",code);act.put("email",email);act.put("deviceId",getDeviceId());act.put("deviceName","Android");act.put("appVersion","3.0.2");
-          Resp ar=http(MASTER+"activate","POST",act.toString(),"");
-          if(ar.code<200||ar.code>=300){sendJs("login",ar);return;}
-          JSONObject aj=new JSONObject(ar.body);if(!aj.optBoolean("ok",false)){sendJs("login",ar);return;}
-          String controlToken=aj.optString("token","");JSONObject inst=aj.optJSONObject("installation");String base=inst==null?"":inst.optString("url","");
-          if(base.isEmpty()||controlToken.isEmpty()){sendJs("login",new Resp(502,"{\"ok\":false,\"message\":\"No se pudo identificar la empresa.\"}"));return;}
-          if(!base.endsWith("/"))base+="/";String api=base+"wp-json/halcon-app/v1/";
-          getSharedPreferences(P,0).edit().putString("site_api",api).putString("control_token",controlToken).apply();
+          android.content.SharedPreferences pref=getSharedPreferences(P,0);
+          String api=pref.getString("site_api","");String controlToken=pref.getString("control_token","");String activatedEmail=pref.getString("activated_email","");
+          if(api.isEmpty()||controlToken.isEmpty()||!email.equalsIgnoreCase(activatedEmail)){
+            JSONObject act=new JSONObject();act.put("accessCode",code);act.put("email",email);act.put("deviceId",getDeviceId());act.put("deviceName","Android");act.put("appVersion","3.0.2");
+            Resp ar=http(MASTER+"activate","POST",act.toString(),"");
+            if(ar.code<200||ar.code>=300){sendJs("login",ar);return;}
+            JSONObject aj=new JSONObject(ar.body);if(!aj.optBoolean("ok",false)){sendJs("login",ar);return;}
+            controlToken=aj.optString("token","");JSONObject inst=aj.optJSONObject("installation");String base=inst==null?"":inst.optString("url","");
+            if(base.isEmpty()||controlToken.isEmpty()){sendJs("login",new Resp(502,"{\"ok\":false,\"message\":\"No se pudo identificar la empresa.\"}"));return;}
+            if(!base.endsWith("/"))base+="/";api=base+"wp-json/halcon-app/v1/";
+            pref.edit().putString("site_api",api).putString("control_token",controlToken).putString("activated_email",email).apply();
+          }
           JSONObject lp=new JSONObject();lp.put("email",email);lp.put("password",password);lp.put("controlToken",controlToken);lp.put("deviceId",getDeviceId());lp.put("deviceName","Android");
           Resp lr=http(api+"login","POST",lp.toString(),"");
-          if(lr.code>=200&&lr.code<300){try{JSONObject lj=new JSONObject(lr.body);if(lj.has("token"))getSharedPreferences(P,0).edit().putString("token",lj.optString("token")).apply();}catch(Exception e){}}
+          if(lr.code>=200&&lr.code<300){try{JSONObject lj=new JSONObject(lr.body);if(lj.has("token"))pref.edit().putString("token",lj.optString("token")).apply();}catch(Exception e){}}
           sendJs("login",lr);
         }catch(Exception e){sendJs("login",new Resp(0,"{\"ok\":false,\"message\":\"No fue posible activar el dispositivo.\"}"));}
       }}).start();
