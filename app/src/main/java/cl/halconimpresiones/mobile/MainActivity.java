@@ -206,6 +206,8 @@ public class MainActivity extends Activity {
     @JavascriptInterface public void logEvent(String type,String message){appendDiagnostic(type,message);}
     @JavascriptInterface public void downloadDiagnostic(String stage){downloadDiagnosticFile(stage);}
     @JavascriptInterface public void sendDiagnostic(String stage){sendDiagnosticNative(stage);}
+    @JavascriptInterface public void refreshControl(){refreshControlNative();}
+    @JavascriptInterface public void markControlMessageRead(String id){markControlMessageReadNative(id);}
     @JavascriptInterface public void share(String kind){
       try{
         Intent i=new Intent(Intent.ACTION_SEND);
@@ -250,7 +252,7 @@ public class MainActivity extends Activity {
           act.put("email","");
           act.put("deviceId",getDeviceId());
           act.put("deviceName","Android");
-          act.put("appVersion","3.0.9");
+          act.put("appVersion","3.1.0");
           appendDiagnostic("activation_start","Validando licencia/codigo");
           Resp ar=http(MASTER+"activate","POST",act.toString(),"");
           appendDiagnostic("activation_http","HTTP "+ar.code+" / activate");
@@ -374,7 +376,7 @@ public class MainActivity extends Activity {
         String m=message==null?"":message;
         if(m.length()>1000)m=m.substring(0,1000);
         row.put("message",m);
-        row.put("appVersion","3.0.9");
+        row.put("appVersion","3.1.0");
         row.put("deviceId",new Bridge().getDeviceId());
         JSONArray out=new JSONArray();int from=Math.max(0,rows.length()-118);for(int i=from;i<rows.length();i++)out.put(rows.opt(i));out.put(row);
         pref.edit().putString(LOG_KEY,out.toString()).apply();
@@ -386,7 +388,7 @@ public class MainActivity extends Activity {
       try{
         android.content.SharedPreferences pref=getSharedPreferences(P,0);
         o.put("generatedAt",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ",Locale.US).format(new Date()));
-        o.put("appVersion","3.0.9");
+        o.put("appVersion","3.1.0");
         o.put("stage",stage==null?"":stage);
         o.put("deviceId",new Bridge().getDeviceId());
         o.put("siteApi",pref.getString("site_api",""));
@@ -443,6 +445,36 @@ public class MainActivity extends Activity {
           appendDiagnostic("diagnostic_send_error",e.getMessage());
           sendJs("diagnostic-send",new Resp(0,"{\"ok\":false,\"message\":\"No fue posible enviar el diagnóstico. Puedes descargarlo y compartirlo manualmente.\"}"));
         }
+      }}).start();
+    }
+
+    void refreshControlNative(){
+      new Thread(new Runnable(){ public void run(){
+        try{
+          android.content.SharedPreferences pref=getSharedPreferences(P,0);
+          String control=pref.getString("control_token","");
+          if(control.isEmpty())return;
+          Resp mr=http(MASTER+"modules","GET","",control);
+          Resp rr=http(MASTER+"messages","GET","",control);
+          JSONObject out=new JSONObject();out.put("ok",true);
+          if(mr.code>=200&&mr.code<300){try{JSONObject m=new JSONObject(mr.body);out.put("modules",m.optJSONArray("modules")==null?new JSONArray():m.optJSONArray("modules"));}catch(Exception e){out.put("modules",new JSONArray());}}
+          if(rr.code>=200&&rr.code<300){try{JSONObject m=new JSONObject(rr.body);out.put("messages",m.optJSONArray("messages")==null?new JSONArray():m.optJSONArray("messages"));}catch(Exception e){out.put("messages",new JSONArray());}}
+          appendDiagnostic("control_refresh","modules="+mr.code+" messages="+rr.code);
+          sendJs("control-refresh",new Resp(200,out.toString()));
+          JSONObject ping=new JSONObject();ping.put("appVersion","3.1.0");ping.put("deviceName","Android");
+          try{http(MASTER+"ping","POST",ping.toString(),control);}catch(Exception e){}
+        }catch(Exception e){appendDiagnostic("control_refresh_error",e.getMessage()==null?"error":e.getMessage());}
+      }}).start();
+    }
+
+    void markControlMessageReadNative(final String id){
+      new Thread(new Runnable(){ public void run(){
+        try{
+          android.content.SharedPreferences pref=getSharedPreferences(P,0);String control=pref.getString("control_token","");
+          if(control.isEmpty())return;
+          Resp rr=http(MASTER+"messages/"+URLEncoder.encode(id,"UTF-8")+"/read","POST","{}",control);
+          sendJs("message-read",rr);
+        }catch(Exception e){appendDiagnostic("message_read_error",e.getMessage()==null?"error":e.getMessage());}
       }}).start();
     }
 
