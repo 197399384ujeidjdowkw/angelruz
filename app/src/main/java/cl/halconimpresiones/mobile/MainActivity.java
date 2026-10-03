@@ -33,6 +33,15 @@ public class MainActivity extends Activity {
 
     root=new FrameLayout(this);
     root.setBackgroundColor(Color.WHITE);
+    getWindow().setStatusBarColor(Color.rgb(112,72,184));
+    getWindow().setNavigationBarColor(Color.rgb(243,244,247));
+    if(Build.VERSION.SDK_INT>=30){
+      root.setOnApplyWindowInsetsListener((v,insets)->{
+        android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());
+        v.setPadding(0,bars.top,0,bars.bottom);
+        return insets;
+      });
+    }
 
     w=new WebView(this);
     w.setBackgroundColor(Color.WHITE);
@@ -106,7 +115,15 @@ public class MainActivity extends Activity {
           }
           return true;
         }
-        if("http".equals(scheme)||"https".equals(scheme)||"whatsapp".equals(scheme)){
+        if("http".equals(scheme)||"https".equals(scheme)){
+          String siteHost="";
+          try{siteHost=hostOf(getSharedPreferences(P,0).getString("requested_site_url",""));}catch(Exception e){}
+          String targetHost=u.getHost()==null?"":u.getHost().toLowerCase(Locale.US);
+          if(!siteHost.isEmpty()&&siteHost.equals(targetHost))return false;
+          try{startActivity(new Intent(Intent.ACTION_VIEW,u));}catch(Exception e){}
+          return true;
+        }
+        if("whatsapp".equals(scheme)){
           try{startActivity(new Intent(Intent.ACTION_VIEW,u));}catch(Exception e){}
           return true;
         }
@@ -204,6 +221,11 @@ public class MainActivity extends Activity {
     @JavascriptInterface public void login(String raw){activateThenLogin(raw);}
     @JavascriptInterface public void changePassword(String raw){api("change-password",raw,true);}
     @JavascriptInterface public void bootstrap(){api("bootstrap","{}",true);}
+    @JavascriptInterface public void openWebApp(String module){openWebAppNative(module);}
+    @JavascriptInterface public void logoutApp(){
+      getSharedPreferences(P,0).edit().remove("token").remove("activated_email").apply();
+      w.post(new Runnable(){ public void run(){ w.loadUrl("file:///android_asset/index.html"); }});
+    }
     @JavascriptInterface public void logout(){getSharedPreferences(P,0).edit().clear().apply();}
     @JavascriptInterface public void forgot(String email){ centralPost("forgot",email); }
     @JavascriptInterface public void help(String email){ centralPost("help",email); }
@@ -289,7 +311,7 @@ public class MainActivity extends Activity {
           act.put("email","");
           act.put("deviceId",getDeviceId());
           act.put("deviceName","Android");
-          act.put("appVersion","3.1.3");
+          act.put("appVersion","3.2.0");
           appendDiagnostic("activation_start","Validando licencia/codigo");
           Resp ar=http(MASTER+"activate","POST",act.toString(),"");
           appendDiagnostic("activation_http","HTTP "+ar.code+" / activate");
@@ -426,7 +448,7 @@ public class MainActivity extends Activity {
         String m=message==null?"":message;
         if(m.length()>1000)m=m.substring(0,1000);
         row.put("message",m);
-        row.put("appVersion","3.1.3");
+        row.put("appVersion","3.2.0");
         row.put("deviceId",new Bridge().getDeviceId());
         JSONArray out=new JSONArray();int from=Math.max(0,rows.length()-118);for(int i=from;i<rows.length();i++)out.put(rows.opt(i));out.put(row);
         pref.edit().putString(LOG_KEY,out.toString()).apply();
@@ -438,7 +460,7 @@ public class MainActivity extends Activity {
       try{
         android.content.SharedPreferences pref=getSharedPreferences(P,0);
         o.put("generatedAt",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ",Locale.US).format(new Date()));
-        o.put("appVersion","3.1.3");
+        o.put("appVersion","3.2.0");
         o.put("stage",stage==null?"":stage);
         o.put("deviceId",new Bridge().getDeviceId());
         o.put("requestedSiteUrl",pref.getString("requested_site_url",""));
@@ -512,7 +534,7 @@ public class MainActivity extends Activity {
           if(rr.code>=200&&rr.code<300){try{JSONObject m=new JSONObject(rr.body);out.put("messages",m.optJSONArray("messages")==null?new JSONArray():m.optJSONArray("messages"));}catch(Exception e){out.put("messages",new JSONArray());}}
           appendDiagnostic("control_refresh","modules="+mr.code+" messages="+rr.code);
           sendJs("control-refresh",new Resp(200,out.toString()));
-          JSONObject ping=new JSONObject();ping.put("appVersion","3.1.3");ping.put("deviceName","Android");
+          JSONObject ping=new JSONObject();ping.put("appVersion","3.2.0");ping.put("deviceName","Android");
           try{http(MASTER+"ping","POST",ping.toString(),control);}catch(Exception e){}
         }catch(Exception e){appendDiagnostic("control_refresh_error",e.getMessage()==null?"error":e.getMessage());}
       }}).start();
@@ -526,6 +548,31 @@ public class MainActivity extends Activity {
           Resp rr=http(MASTER+"messages/"+URLEncoder.encode(id,"UTF-8")+"/read","POST","{}",control);
           sendJs("message-read",rr);
         }catch(Exception e){appendDiagnostic("message_read_error",e.getMessage()==null?"error":e.getMessage());}
+      }}).start();
+    }
+
+    void openWebAppNative(final String module){
+      new Thread(new Runnable(){ public void run(){
+        try{
+          android.content.SharedPreferences pref=getSharedPreferences(P,0);
+          String api=pref.getString("site_api","");
+          String token=pref.getString("token","");
+          if(api.isEmpty()||token.isEmpty()){
+            sendJs("web-session",new Resp(401,"{\"ok\":false,\"message\":\"Sesión de aplicación no disponible.\"}"));
+            return;
+          }
+          String mod=(module==null||module.trim().isEmpty())?"quote":module.trim();
+          Resp rr=http(api+"web-session?module="+URLEncoder.encode(mod,"UTF-8"),"GET","",token);
+          appendDiagnostic("web_session_http","HTTP "+rr.code+" / web-session / "+mod);
+          if(rr.code<200||rr.code>=300){sendJs("web-session",rr);return;}
+          JSONObject out=new JSONObject(rr.body);
+          final String url=out.optString("url","");
+          if(url.isEmpty()){sendJs("web-session",new Resp(502,"{\"ok\":false,\"message\":\"El Núcleo no entregó la vista de aplicación.\"}"));return;}
+          w.post(new Runnable(){ public void run(){ w.loadUrl(url); }});
+        }catch(Exception e){
+          appendDiagnostic("web_session_error",e.getMessage()==null?"error":e.getMessage());
+          sendJs("web-session",new Resp(0,"{\"ok\":false,\"message\":\"No fue posible abrir el sistema real. Verifica Núcleo 6.9.6 o superior.\"}"));
+        }
       }}).start();
     }
 
