@@ -6,6 +6,8 @@ import android.content.*;
 import android.graphics.Color;
 import android.net.Uri;
 import android.provider.Settings;
+import android.provider.MediaStore;
+import android.content.ContentValues;
 import android.view.Gravity;
 import android.view.View;
 import android.webkit.*;
@@ -13,6 +15,9 @@ import android.widget.*;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import org.json.*;
 
 public class MainActivity extends Activity {
@@ -21,6 +26,7 @@ public class MainActivity extends Activity {
   View splash;
   static final String MASTER="https://halconimpresiones.cl/wp-json/halcon-control/v3/app/";
   static final String P="halcon";
+  static final String LOG_KEY="diagnostic_events";
 
   public void onCreate(Bundle b){
     super.onCreate(b);
@@ -189,6 +195,9 @@ public class MainActivity extends Activity {
     @JavascriptInterface public void help(String email){ centralPost("help",email); }
     @JavascriptInterface public void openSupport(int index){ openSupportContact(index); }
     @JavascriptInterface public void save(String raw){api("quotes",raw,true);}
+    @JavascriptInterface public void logEvent(String type,String message){appendDiagnostic(type,message);}
+    @JavascriptInterface public void downloadDiagnostic(String stage){downloadDiagnosticFile(stage);}
+    @JavascriptInterface public void sendDiagnostic(String stage){sendDiagnosticNative(stage);}
     @JavascriptInterface public void share(String kind){
       try{
         Intent i=new Intent(Intent.ACTION_SEND);
@@ -233,8 +242,10 @@ public class MainActivity extends Activity {
           act.put("email","");
           act.put("deviceId",getDeviceId());
           act.put("deviceName","Android");
-          act.put("appVersion","3.0.6");
+          act.put("appVersion","3.0.7");
+          appendDiagnostic("activation_start","Validando licencia/codigo");
           Resp ar=http(MASTER+"activate","POST",act.toString(),"");
+          appendDiagnostic("activation_http","HTTP "+ar.code+" / activate");
           if(ar.code<200||ar.code>=300){sendJs("activate",ar);return;}
           JSONObject aj=new JSONObject(ar.body);
           if(!aj.optBoolean("ok",false)){sendJs("activate",ar);return;}
@@ -256,49 +267,34 @@ public class MainActivity extends Activity {
     }
 
     void probeAccountNative(final String email){
+      appendDiagnostic("email_lookup_start","Consultando estado de cuenta");
       new Thread(new Runnable(){ public void run(){
         try{
           android.content.SharedPreferences pref=getSharedPreferences(P,0);
           String api=pref.getString("site_api","");
           String controlToken=pref.getString("control_token","");
           if(api.isEmpty()||controlToken.isEmpty()){
+            appendDiagnostic("email_lookup_error","Falta empresa vinculada o token de activacion");
             sendJs("probe",new Resp(400,"{\"ok\":false,\"message\":\"Primero valida la licencia.\"}"));
             return;
           }
           JSONObject p=new JSONObject();
           p.put("email",email);
           p.put("controlToken",controlToken);
-          Resp state=http(api+"account-state","POST",p.toString(),"");
+          p.put("deviceId",getDeviceId());
+          p.put("deviceName","Android");
+          Resp state=http(api+"account-probe","POST",p.toString(),"");
+          appendDiagnostic("email_lookup_http","HTTP "+state.code+" / account-probe");
           if(state.code>=200&&state.code<300){
-            JSONObject sj=new JSONObject(state.body);
-            String mode="password";
-            if("create_password".equals(sj.optString("state","")))mode="create";
-            JSONObject out=new JSONObject();
-            out.put("ok",true);
-            out.put("mode",mode);
-            if("create".equals(mode)){
-              JSONObject lp=new JSONObject();
-              lp.put("email",email);
-              lp.put("password","");
-              lp.put("controlToken",controlToken);
-              lp.put("deviceId",getDeviceId());
-              lp.put("deviceName","Android");
-              Resp lr=http(api+"login","POST",lp.toString(),"");
-              if(lr.code>=200&&lr.code<300){
-                JSONObject lj=new JSONObject(lr.body);
-                String tok=lj.optString("token","");
-                if(!tok.isEmpty())pref.edit().putString("token",tok).putString("activated_email",email).apply();
-                out.put("token",tok);
-              }else{
-                sendJs("probe",lr);
-                return;
-              }
-            }
-            sendJs("probe",new Resp(200,out.toString()));
-            return;
+            try{
+              JSONObject sj=new JSONObject(state.body);
+              String tok=sj.optString("token","");
+              if(!tok.isEmpty())pref.edit().putString("token",tok).putString("activated_email",email).apply();
+            }catch(Exception e){}
           }
           sendJs("probe",state);
         }catch(Exception e){
+          appendDiagnostic("email_lookup_exception",e.getMessage()==null?"Error desconocido":e.getMessage());
           sendJs("probe",new Resp(0,"{\"ok\":false,\"message\":\"No fue posible consultar la cuenta.\"}"));
         }
       }}).start();
@@ -341,6 +337,80 @@ public class MainActivity extends Activity {
       }catch(Exception e){
         sendJs("login",new Resp(0,"{\"ok\":false,\"message\":\"Solicitud de acceso invalida.\"}"));
       }
+    }
+
+    void appendDiagnostic(String type,String message){
+      try{
+        android.content.SharedPreferences pref=getSharedPreferences(P,0);
+        JSONArray rows;try{rows=new JSONArray(pref.getString(LOG_KEY,"[]"));}catch(Exception e){rows=new JSONArray();}
+        JSONObject row=new JSONObject();
+        row.put("at",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ",Locale.US).format(new Date()));
+        row.put("type",type==null?"event":type);
+        String m=message==null?"":message;
+        if(m.length()>1000)m=m.substring(0,1000);
+        row.put("message",m);
+        row.put("appVersion","3.0.7");
+        row.put("deviceId",new Bridge().getDeviceId());
+        JSONArray out=new JSONArray();int from=Math.max(0,rows.length()-118);for(int i=from;i<rows.length();i++)out.put(rows.opt(i));out.put(row);
+        pref.edit().putString(LOG_KEY,out.toString()).apply();
+      }catch(Exception e){}
+    }
+
+    JSONObject diagnosticPayload(String stage){
+      JSONObject o=new JSONObject();
+      try{
+        android.content.SharedPreferences pref=getSharedPreferences(P,0);
+        o.put("generatedAt",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ",Locale.US).format(new Date()));
+        o.put("appVersion","3.0.7");
+        o.put("stage",stage==null?"":stage);
+        o.put("deviceId",new Bridge().getDeviceId());
+        o.put("siteApi",pref.getString("site_api",""));
+        o.put("hasControlToken",!pref.getString("control_token","").isEmpty());
+        o.put("hasSessionToken",!pref.getString("token","").isEmpty());
+        o.put("events",new JSONArray(pref.getString(LOG_KEY,"[]")));
+        JSONObject net=new JSONObject();net.put("master",MASTER);net.put("connected",true);o.put("network",net);
+      }catch(Exception e){}
+      return o;
+    }
+
+    void downloadDiagnosticFile(final String stage){
+      new Thread(new Runnable(){ public void run(){
+        try{
+          appendDiagnostic("diagnostic_download","Generando archivo local");
+          byte[] data=diagnosticPayload(stage).toString(2).getBytes(StandardCharsets.UTF_8);
+          String name="sistema-halcon-diagnostico-"+new SimpleDateFormat("yyyyMMdd-HHmmss",Locale.US).format(new Date())+".json";
+          if(Build.VERSION.SDK_INT>=29){
+            ContentValues cv=new ContentValues();cv.put(MediaStore.Downloads.DISPLAY_NAME,name);cv.put(MediaStore.Downloads.MIME_TYPE,"application/json");cv.put(MediaStore.Downloads.RELATIVE_PATH,"Download/Sistema Halcon");
+            Uri uri=getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,cv);
+            if(uri==null)throw new Exception("No se pudo crear el archivo");
+            OutputStream os=getContentResolver().openOutputStream(uri);os.write(data);os.flush();os.close();
+          }else{
+            File dir=new File(getExternalFilesDir(null),"Diagnosticos");if(!dir.exists())dir.mkdirs();File file=new File(dir,name);FileOutputStream os=new FileOutputStream(file);os.write(data);os.close();
+          }
+          final String js="alert("+q("Diagnóstico descargado en la carpeta de descargas.")+")";
+          w.post(new Runnable(){public void run(){w.evaluateJavascript(js,null);}});
+        }catch(Exception e){
+          appendDiagnostic("diagnostic_download_error",e.getMessage());
+          final String js="alert("+q("No fue posible descargar el diagnóstico.")+")";
+          w.post(new Runnable(){public void run(){w.evaluateJavascript(js,null);}});
+        }
+      }}).start();
+    }
+
+    void sendDiagnosticNative(final String stage){
+      new Thread(new Runnable(){ public void run(){
+        try{
+          android.content.SharedPreferences pref=getSharedPreferences(P,0);String control=pref.getString("control_token","");
+          if(control.isEmpty()){sendJs("diagnostic-send",new Resp(401,"{\"ok\":false,\"message\":\"Primero valida la licencia. Mientras tanto puedes descargar el diagnóstico.\"}"));return;}
+          JSONObject p=diagnosticPayload(stage);p.put("message","Diagnostico manual desde APK");
+          Resp rr=http(MASTER+"diagnostic","POST",p.toString(),control);
+          appendDiagnostic("diagnostic_send_http","HTTP "+rr.code+" / app/diagnostic");
+          sendJs("diagnostic-send",rr);
+        }catch(Exception e){
+          appendDiagnostic("diagnostic_send_error",e.getMessage());
+          sendJs("diagnostic-send",new Resp(0,"{\"ok\":false,\"message\":\"No fue posible enviar el diagnóstico. Puedes descargarlo y compartirlo manualmente.\"}"));
+        }
+      }}).start();
     }
 
     void sendJs(final String name,final Resp r){
