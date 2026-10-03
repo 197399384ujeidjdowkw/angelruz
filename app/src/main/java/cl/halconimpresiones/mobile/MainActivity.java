@@ -101,8 +101,8 @@ public class MainActivity extends Activity {
         if("halcon".equals(scheme)){
           String host=u.getHost();String path=u.getPath();String stage=u.getQueryParameter("stage");
           if("diagnostic".equals(host)){
-            if("/download".equals(path)){ appendDiagnostic("diagnostic_tap","Descargar diagnostico"); downloadDiagnosticFile(stage); }
-            else if("/send".equals(path)){ appendDiagnostic("diagnostic_tap","Enviar diagnostico"); sendDiagnosticNative(stage); }
+            if("/download".equals(path)){ Bridge b=new Bridge(); b.appendDiagnostic("diagnostic_tap","Descargar diagnostico"); b.downloadDiagnosticFile(stage); }
+            else if("/send".equals(path)){ Bridge b=new Bridge(); b.appendDiagnostic("diagnostic_tap","Enviar diagnostico"); b.sendDiagnosticNative(stage); }
           }
           return true;
         }
