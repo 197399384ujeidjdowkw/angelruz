@@ -185,7 +185,7 @@ public class MainActivity extends Activity {
       return x==null?"android":x;
     }
     @JavascriptInterface public void activateCode(String code){activateCodeOnly(code);}
-    @JavascriptInterface public void probeAccount(String email){probeAccountNative(email);}
+    @JavascriptInterface public void resolveAccount(String email){resolveAccountNative(email);}
     @JavascriptInterface public void loginExisting(String email,String password){loginWithStoredActivation(email,password);}
     @JavascriptInterface public void login(String raw){activateThenLogin(raw);}
     @JavascriptInterface public void changePassword(String raw){api("change-password",raw,true);}
@@ -242,7 +242,7 @@ public class MainActivity extends Activity {
           act.put("email","");
           act.put("deviceId",getDeviceId());
           act.put("deviceName","Android");
-          act.put("appVersion","3.0.7");
+          act.put("appVersion","3.0.8");
           appendDiagnostic("activation_start","Validando licencia/codigo");
           Resp ar=http(MASTER+"activate","POST",act.toString(),"");
           appendDiagnostic("activation_http","HTTP "+ar.code+" / activate");
@@ -266,8 +266,8 @@ public class MainActivity extends Activity {
       }}).start();
     }
 
-    void probeAccountNative(final String email){
-      appendDiagnostic("email_lookup_start","Consultando estado de cuenta");
+    void resolveAccountNative(final String email){
+      appendDiagnostic("email_lookup_start","Resolviendo cuenta por login directo");
       new Thread(new Runnable(){ public void run(){
         try{
           android.content.SharedPreferences pref=getSharedPreferences(P,0);
@@ -275,27 +275,40 @@ public class MainActivity extends Activity {
           String controlToken=pref.getString("control_token","");
           if(api.isEmpty()||controlToken.isEmpty()){
             appendDiagnostic("email_lookup_error","Falta empresa vinculada o token de activacion");
-            sendJs("probe",new Resp(400,"{\"ok\":false,\"message\":\"Primero valida la licencia.\"}"));
+            sendJs("resolve",new Resp(400,"{\"ok\":false,\"message\":\"Primero valida la licencia.\"}"));
             return;
           }
-          JSONObject p=new JSONObject();
-          p.put("email",email);
-          p.put("controlToken",controlToken);
-          p.put("deviceId",getDeviceId());
-          p.put("deviceName","Android");
-          Resp state=http(api+"account-probe","POST",p.toString(),"");
-          appendDiagnostic("email_lookup_http","HTTP "+state.code+" / account-probe");
-          if(state.code>=200&&state.code<300){
-            try{
-              JSONObject sj=new JSONObject(state.body);
-              String tok=sj.optString("token","");
-              if(!tok.isEmpty())pref.edit().putString("token",tok).putString("activated_email",email).apply();
-            }catch(Exception e){}
+          JSONObject lp=new JSONObject();
+          lp.put("email",email);
+          lp.put("password","");
+          lp.put("controlToken",controlToken);
+          lp.put("deviceId",getDeviceId());
+          lp.put("deviceName","Android");
+          Resp lr=http(api+"login","POST",lp.toString(),"");
+          appendDiagnostic("email_lookup_http","HTTP "+lr.code+" / login-vacio");
+          if(lr.code>=200&&lr.code<300){
+            JSONObject lj=new JSONObject(lr.body);
+            String tok=lj.optString("token","");
+            if(!tok.isEmpty())pref.edit().putString("token",tok).putString("activated_email",email).apply();
+            JSONObject out=new JSONObject();
+            out.put("ok",true);
+            out.put("mode",lj.optBoolean("forcePasswordChange",false)?"create":"password");
+            out.put("token",tok);
+            sendJs("resolve",new Resp(200,out.toString()));
+            return;
           }
-          sendJs("probe",state);
+          JSONObject er;try{er=new JSONObject(lr.body);}catch(Exception e){er=new JSONObject();}
+          String code=er.optString("code","");
+          String msg=er.optString("message","");
+          if(lr.code==409 && ("halcon_app_password_required".equals(code) || "PASSWORD_REQUIRED".equals(msg))){
+            JSONObject out=new JSONObject();out.put("ok",true);out.put("mode","password");
+            sendJs("resolve",new Resp(200,out.toString()));
+            return;
+          }
+          sendJs("resolve",lr);
         }catch(Exception e){
           appendDiagnostic("email_lookup_exception",e.getMessage()==null?"Error desconocido":e.getMessage());
-          sendJs("probe",new Resp(0,"{\"ok\":false,\"message\":\"No fue posible consultar la cuenta.\"}"));
+          sendJs("resolve",new Resp(0,"{\"ok\":false,\"message\":\"No fue posible consultar la cuenta.\"}"));
         }
       }}).start();
     }
@@ -349,7 +362,7 @@ public class MainActivity extends Activity {
         String m=message==null?"":message;
         if(m.length()>1000)m=m.substring(0,1000);
         row.put("message",m);
-        row.put("appVersion","3.0.7");
+        row.put("appVersion","3.0.8");
         row.put("deviceId",new Bridge().getDeviceId());
         JSONArray out=new JSONArray();int from=Math.max(0,rows.length()-118);for(int i=from;i<rows.length();i++)out.put(rows.opt(i));out.put(row);
         pref.edit().putString(LOG_KEY,out.toString()).apply();
@@ -361,7 +374,7 @@ public class MainActivity extends Activity {
       try{
         android.content.SharedPreferences pref=getSharedPreferences(P,0);
         o.put("generatedAt",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ",Locale.US).format(new Date()));
-        o.put("appVersion","3.0.7");
+        o.put("appVersion","3.0.8");
         o.put("stage",stage==null?"":stage);
         o.put("deviceId",new Bridge().getDeviceId());
         o.put("siteApi",pref.getString("site_api",""));
