@@ -245,6 +245,13 @@ public class MainActivity extends Activity {
     }
 
     void activateCodeOnly(final String code){
+      // Limpia por completo cualquier empresa anterior antes de validar otra licencia.
+      getSharedPreferences(P,0).edit()
+        .remove("token").remove("activated_email")
+        .remove("site_api").remove("control_token")
+        .remove("activation_code").remove("installation_id")
+        .remove("company_name").remove("company_domain").remove("license_key")
+        .apply();
       new Thread(new Runnable(){ public void run(){
         try{
           JSONObject act=new JSONObject();
@@ -252,7 +259,7 @@ public class MainActivity extends Activity {
           act.put("email","");
           act.put("deviceId",getDeviceId());
           act.put("deviceName","Android");
-          act.put("appVersion","3.1.1");
+          act.put("appVersion","3.1.2");
           appendDiagnostic("activation_start","Validando licencia/codigo");
           Resp ar=http(MASTER+"activate","POST",act.toString(),"");
           appendDiagnostic("activation_http","HTTP "+ar.code+" / activate");
@@ -306,6 +313,8 @@ public class MainActivity extends Activity {
           p.put("controlToken",controlToken);
           p.put("installationId",pref.getString("installation_id",""));
           p.put("companyDomain",pref.getString("company_domain",""));
+          p.put("licenseKey",pref.getString("license_key",""));
+          p.put("accessCode",pref.getString("activation_code",""));
           p.put("deviceId",getDeviceId());
           p.put("deviceName","Android");
           Resp rr=http(api+"account-probe","POST",p.toString(),"");
@@ -342,6 +351,8 @@ public class MainActivity extends Activity {
           lp.put("controlToken",controlToken);
           lp.put("installationId",pref.getString("installation_id",""));
           lp.put("companyDomain",pref.getString("company_domain",""));
+          lp.put("licenseKey",pref.getString("license_key",""));
+          lp.put("accessCode",pref.getString("activation_code",""));
           lp.put("deviceId",getDeviceId());
           lp.put("deviceName","Android");
           Resp lr=http(api+"login","POST",lp.toString(),"");
@@ -378,7 +389,7 @@ public class MainActivity extends Activity {
         String m=message==null?"":message;
         if(m.length()>1000)m=m.substring(0,1000);
         row.put("message",m);
-        row.put("appVersion","3.1.1");
+        row.put("appVersion","3.1.2");
         row.put("deviceId",new Bridge().getDeviceId());
         JSONArray out=new JSONArray();int from=Math.max(0,rows.length()-118);for(int i=from;i<rows.length();i++)out.put(rows.opt(i));out.put(row);
         pref.edit().putString(LOG_KEY,out.toString()).apply();
@@ -390,7 +401,7 @@ public class MainActivity extends Activity {
       try{
         android.content.SharedPreferences pref=getSharedPreferences(P,0);
         o.put("generatedAt",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ",Locale.US).format(new Date()));
-        o.put("appVersion","3.1.1");
+        o.put("appVersion","3.1.2");
         o.put("stage",stage==null?"":stage);
         o.put("deviceId",new Bridge().getDeviceId());
         o.put("siteApi",pref.getString("site_api",""));
@@ -463,7 +474,7 @@ public class MainActivity extends Activity {
           if(rr.code>=200&&rr.code<300){try{JSONObject m=new JSONObject(rr.body);out.put("messages",m.optJSONArray("messages")==null?new JSONArray():m.optJSONArray("messages"));}catch(Exception e){out.put("messages",new JSONArray());}}
           appendDiagnostic("control_refresh","modules="+mr.code+" messages="+rr.code);
           sendJs("control-refresh",new Resp(200,out.toString()));
-          JSONObject ping=new JSONObject();ping.put("appVersion","3.1.1");ping.put("deviceName","Android");
+          JSONObject ping=new JSONObject();ping.put("appVersion","3.1.2");ping.put("deviceName","Android");
           try{http(MASTER+"ping","POST",ping.toString(),control);}catch(Exception e){}
         }catch(Exception e){appendDiagnostic("control_refresh_error",e.getMessage()==null?"error":e.getMessage());}
       }}).start();
