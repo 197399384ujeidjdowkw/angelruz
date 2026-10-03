@@ -1,4 +1,4 @@
-var S={stage:localStorage.getItem('stage')||'license',email:localStorage.getItem('email')||'',token:'',modules:[],messages:[],controlMessages:[],items:[{open:true}],clientName:'',clientPhone:''};
+var S={stage:localStorage.getItem('stage')||'license',siteUrl:localStorage.getItem('siteUrl')||'',email:localStorage.getItem('email')||'',token:'',modules:[],messages:[],controlMessages:[],items:[{open:true}],clientName:'',clientPhone:''};
 try{S.token=window.HalconNative?HalconNative.getToken():''}catch(e){}
 function byId(id){return document.getElementById(id)}
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -9,12 +9,12 @@ function hold(inputId,buttonId){var x=byId(inputId),b=byId(buttonId);function sh
 function render(){try{HalconNative.logEvent('stage',S.stage)}catch(e){}if(S.token&&S.stage==='ready'){home();return}auth()}
 function auth(){
  if(S.stage==='license'){
-  set(shell('<div class="small">Ingresa la licencia o código de activación entregado por Sistema Halcón.</div><label class="field"><span>Licencia / código de activación</span><input id="license" placeholder="HALCON-..."></label><button class="primary" id="validate">Validar activación</button><div class="status" id="status"></div>'));
-  byId('validate').onclick=function(){var code=byId('license').value.trim().toUpperCase();if(code.length<8){alert('Ingresa una licencia válida.');return}busy(this,true,'Validando…');byId('status').textContent='Comprobando empresa…';localStorage.setItem('activationCode',code);try{HalconNative.activateCode(code)}catch(e){busy(this,false);byId('status').textContent='No fue posible iniciar la validación.'}};
+  set(shell('<div class="small">Primero indica la dirección de tu Sistema Halcón y luego valida la licencia de esa empresa.</div><label class="field"><span>Dirección del sistema</span><input id="siteUrl" type="text" value="'+esc(S.siteUrl)+'" placeholder="halconimpresiones.cl/orden"></label><label class="field"><span>Licencia / código de activación</span><input id="license" placeholder="HALCON-..."></label><button class="primary" id="validate">Validar activación</button><div class="status" id="status"></div>'));
+  byId('validate').onclick=function(){var site=byId('siteUrl').value.trim();var code=byId('license').value.trim().toUpperCase();if(site.length<4){alert('Ingresa la dirección de tu sistema.');return}if(code.length<8){alert('Ingresa una licencia válida.');return}S.siteUrl=site;localStorage.setItem('siteUrl',site);localStorage.setItem('activationCode',code);busy(this,true,'Validando…');byId('status').textContent='Comprobando dirección, licencia y empresa…';try{HalconNative.activateForSite(site,code)}catch(e){busy(this,false);byId('status').textContent='No fue posible iniciar la validación.'}};
   return;
  }
  if(S.stage==='email'){
-  set(shell('<div class="small">Empresa validada. Ingresa el correo registrado para continuar.</div><label class="field"><span>Correo registrado</span><input id="email" type="email" value="'+esc(S.email)+'"></label><button class="primary" id="continue">Continuar</button><div class="status" id="status"></div><button class="back" id="changeLicense">Cambiar licencia</button>'));
+  set(shell('<div class="small">Empresa validada para <b>'+esc(S.siteUrl||localStorage.getItem('siteUrl')||'')+'</b>. Ingresa el correo registrado en esta instalación.</div><label class="field"><span>Correo registrado</span><input id="email" type="email" value="'+esc(S.email)+'"></label><button class="primary" id="continue">Continuar</button><div class="status" id="status"></div><button class="back" id="changeLicense">Cambiar dirección o licencia</button>'));
   byId('continue').onclick=function(){var email=byId('email').value.trim();if(email.indexOf('@')<1){alert('Ingresa un correo válido.');return}S.email=email;localStorage.setItem('email',email);busy(this,true,'Consultando…');byId('status').textContent='Verificando tu cuenta…';try{HalconNative.logEvent('email_lookup',email);HalconNative.resolveAccount(email)}catch(e){busy(this,false);byId('status').textContent='No fue posible consultar la cuenta.'}};
   byId('changeLicense').onclick=function(){S.stage='license';localStorage.setItem('stage','license');render()};return;
  }
