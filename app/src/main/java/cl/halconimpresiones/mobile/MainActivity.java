@@ -252,7 +252,7 @@ public class MainActivity extends Activity {
           act.put("email","");
           act.put("deviceId",getDeviceId());
           act.put("deviceName","Android");
-          act.put("appVersion","3.1.0");
+          act.put("appVersion","3.1.1");
           appendDiagnostic("activation_start","Validando licencia/codigo");
           Resp ar=http(MASTER+"activate","POST",act.toString(),"");
           appendDiagnostic("activation_http","HTTP "+ar.code+" / activate");
@@ -315,6 +315,7 @@ public class MainActivity extends Activity {
               JSONObject j=new JSONObject(rr.body);
               String tok=j.optString("token","");
               if(!tok.isEmpty())pref.edit().putString("token",tok).putString("activated_email",email).apply();
+              JSONObject bind=new JSONObject();bind.put("email",email);try{http(MASTER+"bind-user","POST",bind.toString(),controlToken);}catch(Exception ignore){}
             }catch(Exception e){}
           }
           sendJs("resolve",rr);
@@ -348,6 +349,7 @@ public class MainActivity extends Activity {
             try{
               JSONObject lj=new JSONObject(lr.body);
               if(lj.has("token"))pref.edit().putString("token",lj.optString("token")).putString("activated_email",email).apply();
+              JSONObject bind=new JSONObject();bind.put("email",email);try{http(MASTER+"bind-user","POST",bind.toString(),controlToken);}catch(Exception ignore){}
             }catch(Exception e){}
           }
           sendJs("login",lr);
@@ -376,7 +378,7 @@ public class MainActivity extends Activity {
         String m=message==null?"":message;
         if(m.length()>1000)m=m.substring(0,1000);
         row.put("message",m);
-        row.put("appVersion","3.1.0");
+        row.put("appVersion","3.1.1");
         row.put("deviceId",new Bridge().getDeviceId());
         JSONArray out=new JSONArray();int from=Math.max(0,rows.length()-118);for(int i=from;i<rows.length();i++)out.put(rows.opt(i));out.put(row);
         pref.edit().putString(LOG_KEY,out.toString()).apply();
@@ -388,7 +390,7 @@ public class MainActivity extends Activity {
       try{
         android.content.SharedPreferences pref=getSharedPreferences(P,0);
         o.put("generatedAt",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ",Locale.US).format(new Date()));
-        o.put("appVersion","3.1.0");
+        o.put("appVersion","3.1.1");
         o.put("stage",stage==null?"":stage);
         o.put("deviceId",new Bridge().getDeviceId());
         o.put("siteApi",pref.getString("site_api",""));
@@ -461,7 +463,7 @@ public class MainActivity extends Activity {
           if(rr.code>=200&&rr.code<300){try{JSONObject m=new JSONObject(rr.body);out.put("messages",m.optJSONArray("messages")==null?new JSONArray():m.optJSONArray("messages"));}catch(Exception e){out.put("messages",new JSONArray());}}
           appendDiagnostic("control_refresh","modules="+mr.code+" messages="+rr.code);
           sendJs("control-refresh",new Resp(200,out.toString()));
-          JSONObject ping=new JSONObject();ping.put("appVersion","3.1.0");ping.put("deviceName","Android");
+          JSONObject ping=new JSONObject();ping.put("appVersion","3.1.1");ping.put("deviceName","Android");
           try{http(MASTER+"ping","POST",ping.toString(),control);}catch(Exception e){}
         }catch(Exception e){appendDiagnostic("control_refresh_error",e.getMessage()==null?"error":e.getMessage());}
       }}).start();
