@@ -27,6 +27,7 @@ public class MainActivity extends Activity {
   static final String MASTER="https://halconimpresiones.cl/wp-json/halcon-control/v3/app/";
   static final String P="halcon";
   static final String LOG_KEY="diagnostic_events";
+  static final String PENDING_SHARES_KEY="pending_shares_v1";
 
   public void onCreate(Bundle b){
     super.onCreate(b);
@@ -185,16 +186,50 @@ public class MainActivity extends Activity {
     handle(i);
   }
 
+  void queuePendingShare(String text,String source,String sender){
+    try{
+      String clean=text==null?"":text.trim();
+      if(clean.isEmpty())return;
+      android.content.SharedPreferences pref=getSharedPreferences(P,0);
+      JSONArray rows;try{rows=new JSONArray(pref.getString(PENDING_SHARES_KEY,"[]"));}catch(Exception e){rows=new JSONArray();}
+      JSONObject row=new JSONObject();
+      row.put("text",clean);
+      row.put("source",source==null?"compartido":source);
+      row.put("sender",sender==null?"":sender);
+      row.put("count",1);
+      row.put("receivedAt",System.currentTimeMillis());
+      JSONArray out=new JSONArray();out.put(row);
+      for(int x=0;x<rows.length()&&x<39;x++)out.put(rows.opt(x));
+      pref.edit().putString(PENDING_SHARES_KEY,out.toString()).apply();
+    }catch(Exception e){}
+  }
+
+  String consumePendingSharesNative(){
+    try{
+      android.content.SharedPreferences pref=getSharedPreferences(P,0);
+      String raw=pref.getString(PENDING_SHARES_KEY,"[]");
+      pref.edit().remove(PENDING_SHARES_KEY).apply();
+      return raw==null?"[]":raw;
+    }catch(Exception e){return "[]";}
+  }
+
   void handle(Intent i){
     if(i==null)return;
     String a=i.getAction();
     if(Intent.ACTION_SEND.equals(a)||Intent.ACTION_SEND_MULTIPLE.equals(a)){
       String t=i.getStringExtra(Intent.EXTRA_TEXT);
-      String sender=i.getStringExtra(Intent.EXTRA_SUBJECT);String meta=((t==null?"":t)+" "+(sender==null?"":sender)).toLowerCase();String source="compartido";
+      String sender=i.getStringExtra(Intent.EXTRA_SUBJECT);
+      String meta=((t==null?"":t)+" "+(sender==null?"":sender)).toLowerCase();
+      String source="compartido";
       try{Uri ref=getReferrer();if(ref!=null)meta+=" "+String.valueOf(ref.getHost()).toLowerCase();}catch(Exception e){}
-      if(meta.contains("telegram")||meta.contains("t.me"))source="telegram";else if(meta.contains("messenger")||meta.contains("m.me")||meta.contains("facebook"))source="messenger";else if(meta.contains("instagram"))source="instagram";else if(meta.contains("tiktok"))source="tiktok";else if(meta.contains("whatsapp")||meta.contains("wa.me"))source="whatsapp";
-      final String js="window.__incoming&&window.__incoming("+q(t==null?"":t)+",1,"+q(source)+","+q(sender==null?"":sender)+")";
-      w.postDelayed(new Runnable(){ public void run(){ w.evaluateJavascript(js,null); }},700);
+      if(meta.contains("telegram")||meta.contains("t.me"))source="telegram";
+      else if(meta.contains("messenger")||meta.contains("m.me")||meta.contains("facebook"))source="messenger";
+      else if(meta.contains("instagram"))source="instagram";
+      else if(meta.contains("tiktok"))source="tiktok";
+      else if(meta.contains("whatsapp")||meta.contains("wa.me"))source="whatsapp";
+      queuePendingShare(t==null?"":t,source,sender==null?"":sender);
+      final String js="window.__halconConsumePending&&window.__halconConsumePending()";
+      w.postDelayed(new Runnable(){ public void run(){ w.evaluateJavascript(js,null); }},550);
     }
   }
 
@@ -205,6 +240,7 @@ public class MainActivity extends Activity {
 
   class Bridge{
     @JavascriptInterface public String getToken(){return getSharedPreferences(P,0).getString("token","");}
+    @JavascriptInterface public String consumePendingShares(){return consumePendingSharesNative();}
     @JavascriptInterface public String getDeviceId(){
       String x=Settings.Secure.getString(getContentResolver(),Settings.Secure.ANDROID_ID);
       return x==null?"android":x;
@@ -311,7 +347,7 @@ public class MainActivity extends Activity {
           act.put("email","");
           act.put("deviceId",getDeviceId());
           act.put("deviceName","Android");
-          act.put("appVersion","3.2.0");
+          act.put("appVersion","3.2.1");
           appendDiagnostic("activation_start","Validando licencia/codigo");
           Resp ar=http(MASTER+"activate","POST",act.toString(),"");
           appendDiagnostic("activation_http","HTTP "+ar.code+" / activate");
@@ -448,7 +484,7 @@ public class MainActivity extends Activity {
         String m=message==null?"":message;
         if(m.length()>1000)m=m.substring(0,1000);
         row.put("message",m);
-        row.put("appVersion","3.2.0");
+        row.put("appVersion","3.2.1");
         row.put("deviceId",new Bridge().getDeviceId());
         JSONArray out=new JSONArray();int from=Math.max(0,rows.length()-118);for(int i=from;i<rows.length();i++)out.put(rows.opt(i));out.put(row);
         pref.edit().putString(LOG_KEY,out.toString()).apply();
@@ -460,7 +496,7 @@ public class MainActivity extends Activity {
       try{
         android.content.SharedPreferences pref=getSharedPreferences(P,0);
         o.put("generatedAt",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ",Locale.US).format(new Date()));
-        o.put("appVersion","3.2.0");
+        o.put("appVersion","3.2.1");
         o.put("stage",stage==null?"":stage);
         o.put("deviceId",new Bridge().getDeviceId());
         o.put("requestedSiteUrl",pref.getString("requested_site_url",""));
@@ -534,7 +570,7 @@ public class MainActivity extends Activity {
           if(rr.code>=200&&rr.code<300){try{JSONObject m=new JSONObject(rr.body);out.put("messages",m.optJSONArray("messages")==null?new JSONArray():m.optJSONArray("messages"));}catch(Exception e){out.put("messages",new JSONArray());}}
           appendDiagnostic("control_refresh","modules="+mr.code+" messages="+rr.code);
           sendJs("control-refresh",new Resp(200,out.toString()));
-          JSONObject ping=new JSONObject();ping.put("appVersion","3.2.0");ping.put("deviceName","Android");
+          JSONObject ping=new JSONObject();ping.put("appVersion","3.2.1");ping.put("deviceName","Android");
           try{http(MASTER+"ping","POST",ping.toString(),control);}catch(Exception e){}
         }catch(Exception e){appendDiagnostic("control_refresh_error",e.getMessage()==null?"error":e.getMessage());}
       }}).start();
