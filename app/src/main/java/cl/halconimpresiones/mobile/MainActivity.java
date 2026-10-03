@@ -37,7 +37,7 @@ public class MainActivity extends Activity {
     getWindow().setNavigationBarColor(Color.rgb(243,244,247));
     if(Build.VERSION.SDK_INT>=30){
       root.setOnApplyWindowInsetsListener((v,insets)->{
-        android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());
+        android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());
         v.setPadding(0,bars.top,0,bars.bottom);
         return insets;
       });
@@ -117,7 +117,7 @@ public class MainActivity extends Activity {
         }
         if("http".equals(scheme)||"https".equals(scheme)){
           String siteHost="";
-          try{siteHost=hostOf(getSharedPreferences(P,0).getString("requested_site_url",""));}catch(Exception e){}
+          try{String rawSite=getSharedPreferences(P,0).getString("requested_site_url","");if(!rawSite.matches("(?i)^https?://.*"))rawSite="https://"+rawSite;Uri su=Uri.parse(rawSite);siteHost=su.getHost()==null?"":su.getHost().toLowerCase(Locale.US);}catch(Exception e){}
           String targetHost=u.getHost()==null?"":u.getHost().toLowerCase(Locale.US);
           if(!siteHost.isEmpty()&&siteHost.equals(targetHost))return false;
           try{startActivity(new Intent(Intent.ACTION_VIEW,u));}catch(Exception e){}
