@@ -193,6 +193,12 @@ public class MainActivity extends Activity {
       return x==null?"android":x;
     }
     @JavascriptInterface public void activateCode(String code){activateCodeOnly(code);}
+    @JavascriptInterface public void activateForSite(String siteUrl,String code){
+      String normalized=normalizeSiteInput(siteUrl);
+      if(normalized.isEmpty()){sendJs("activate",new Resp(400,"{\"ok\":false,\"message\":\"Ingresa una dirección válida del sistema.\"}"));return;}
+      getSharedPreferences(P,0).edit().putString("requested_site_url",normalized).apply();
+      activateCodeOnly(code);
+    }
     @JavascriptInterface public void resolveAccount(String email){resolveAccountNative(email);}
     @JavascriptInterface public void loginExisting(String email,String password){loginWithStoredActivation(email,password);}
     @JavascriptInterface public void login(String raw){activateThenLogin(raw);}
@@ -244,6 +250,29 @@ public class MainActivity extends Activity {
       }}).start();
     }
 
+    String normalizeSiteInput(String raw){
+      try{
+        String x=raw==null?"":raw.trim();
+        if(x.isEmpty())return "";
+        if(!x.matches("(?i)^https?://.*"))x="https://"+x;
+        Uri u=Uri.parse(x);
+        String host=u.getHost();
+        if(host==null||host.trim().isEmpty())return "";
+        String path=u.getPath()==null?"":u.getPath().trim();
+        while(path.endsWith("/")&&path.length()>1)path=path.substring(0,path.length()-1);
+        return "https://"+host.toLowerCase(Locale.US)+path;
+      }catch(Exception e){return "";}
+    }
+
+    String hostOf(String raw){
+      try{
+        String x=raw==null?"":raw.trim();
+        if(!x.matches("(?i)^https?://.*"))x="https://"+x;
+        String h=Uri.parse(x).getHost();
+        return h==null?"":h.toLowerCase(Locale.US);
+      }catch(Exception e){return "";}
+    }
+
     void activateCodeOnly(final String code){
       // Limpia por completo cualquier empresa anterior antes de validar otra licencia.
       getSharedPreferences(P,0).edit()
@@ -256,10 +285,11 @@ public class MainActivity extends Activity {
         try{
           JSONObject act=new JSONObject();
           act.put("accessCode",code);
+          act.put("siteUrl",getSharedPreferences(P,0).getString("requested_site_url",""));
           act.put("email","");
           act.put("deviceId",getDeviceId());
           act.put("deviceName","Android");
-          act.put("appVersion","3.1.2");
+          act.put("appVersion","3.1.3");
           appendDiagnostic("activation_start","Validando licencia/codigo");
           Resp ar=http(MASTER+"activate","POST",act.toString(),"");
           appendDiagnostic("activation_http","HTTP "+ar.code+" / activate");
@@ -275,6 +305,13 @@ public class MainActivity extends Activity {
           String licenseKey=inst==null?"":inst.optString("licenseKey","");
           if(base.isEmpty()||controlToken.isEmpty()){
             sendJs("activate",new Resp(502,"{\"ok\":false,\"message\":\"No se pudo identificar la empresa.\"}"));
+            return;
+          }
+          String requestedSite=getSharedPreferences(P,0).getString("requested_site_url","");
+          String wantedHost=hostOf(requestedSite),actualHost=hostOf(base);
+          if(!requestedSite.isEmpty()&&(wantedHost.isEmpty()||actualHost.isEmpty()||!wantedHost.equals(actualHost))){
+            appendDiagnostic("activation_mismatch","La dirección indicada no coincide con la empresa devuelta por la licencia");
+            sendJs("activate",new Resp(409,"{\"ok\":false,\"message\":\"La licencia activa no corresponde a la dirección indicada.\"}"));
             return;
           }
           if(!base.endsWith("/"))base+="/";
@@ -389,7 +426,7 @@ public class MainActivity extends Activity {
         String m=message==null?"":message;
         if(m.length()>1000)m=m.substring(0,1000);
         row.put("message",m);
-        row.put("appVersion","3.1.2");
+        row.put("appVersion","3.1.3");
         row.put("deviceId",new Bridge().getDeviceId());
         JSONArray out=new JSONArray();int from=Math.max(0,rows.length()-118);for(int i=from;i<rows.length();i++)out.put(rows.opt(i));out.put(row);
         pref.edit().putString(LOG_KEY,out.toString()).apply();
@@ -401,9 +438,10 @@ public class MainActivity extends Activity {
       try{
         android.content.SharedPreferences pref=getSharedPreferences(P,0);
         o.put("generatedAt",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ",Locale.US).format(new Date()));
-        o.put("appVersion","3.1.2");
+        o.put("appVersion","3.1.3");
         o.put("stage",stage==null?"":stage);
         o.put("deviceId",new Bridge().getDeviceId());
+        o.put("requestedSiteUrl",pref.getString("requested_site_url",""));
         o.put("siteApi",pref.getString("site_api",""));
         o.put("installationId",pref.getString("installation_id",""));
         o.put("companyName",pref.getString("company_name",""));
@@ -474,7 +512,7 @@ public class MainActivity extends Activity {
           if(rr.code>=200&&rr.code<300){try{JSONObject m=new JSONObject(rr.body);out.put("messages",m.optJSONArray("messages")==null?new JSONArray():m.optJSONArray("messages"));}catch(Exception e){out.put("messages",new JSONArray());}}
           appendDiagnostic("control_refresh","modules="+mr.code+" messages="+rr.code);
           sendJs("control-refresh",new Resp(200,out.toString()));
-          JSONObject ping=new JSONObject();ping.put("appVersion","3.1.2");ping.put("deviceName","Android");
+          JSONObject ping=new JSONObject();ping.put("appVersion","3.1.3");ping.put("deviceName","Android");
           try{http(MASTER+"ping","POST",ping.toString(),control);}catch(Exception e){}
         }catch(Exception e){appendDiagnostic("control_refresh_error",e.getMessage()==null?"error":e.getMessage());}
       }}).start();
