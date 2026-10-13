@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ main, halcon-android-notificaciones-20261013 ]
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,7 +18,20 @@ jobs:
         with:
           gradle-version: '8.11.1'
       - run: gradle assembleDebug
+      - run: gradle assembleRelease
+      - name: Align release APK
+        if: github.ref_name == 'halcon-android-notificaciones-20261013'
+        run: |
+          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -1)"
+          "$ZIPALIGN" -f -p 4 app/build/outputs/apk/release/app-release-unsigned.apk app/build/outputs/apk/release/Sistema-Halcon-v3.3.5-aligned-unsigned.apk
       - uses: actions/upload-artifact@v4
         with:
           name: sistema-halcon-apk-debug
           path: app/build/outputs/apk/debug/*.apk
+      - name: Publish aligned unsigned build
+        if: github.ref_name == 'halcon-android-notificaciones-20261013'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete halcon-v3.3.5-build --yes --cleanup-tag || true
+          gh release create halcon-v3.3.5-build app/build/outputs/apk/release/Sistema-Halcon-v3.3.5-aligned-unsigned.apk --target "$GITHUB_SHA" --title "Sistema Halcon v3.3.5 build" --notes "Build técnico alineado para firma estable de Sistema Halcón." --prerelease
