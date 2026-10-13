@@ -46,6 +46,7 @@ public final class HalconAlertRuntime {
       prefs(activity).edit().putString(KEY_REST,rest.trim()).putString(KEY_TOKEN,token.trim()).apply();
       requestPermission(activity);ensureChannels(activity);schedulePeriodicSync(activity);syncNow(activity);
     }
+    @JavascriptInterface public void requestNotificationPermission(){requestPermission(activity);ensureChannels(activity);}
     @JavascriptInterface public void refreshAlerts(){requestPermission(activity);schedulePeriodicSync(activity);syncNow(activity);}
     @JavascriptInterface public void notify(String title,String body){showEventNotification(activity,"general:"+System.currentTimeMillis(),title,body,"home","general");}
     @JavascriptInterface public String consumePendingNavigation(){String x=prefs(activity).getString(KEY_NAV,"");prefs(activity).edit().remove(KEY_NAV).apply();return x==null?"":x;}
