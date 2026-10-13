@@ -2,7 +2,7 @@ name: Build Sistema Halcon APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, halcon-android-notificaciones-20261013 ]
 jobs:
   build:
     runs-on: ubuntu-latest
