@@ -342,19 +342,49 @@ public class MainActivity extends Activity {
       getSharedPreferences(P,0).edit().putString("requested_site_url",normalized).apply();
       new Thread(new Runnable(){ public void run(){
         try{
-          Resp rr=http(normalized+"/wp-json/halcon-app/v1/status","GET","","");
-          if(rr.code<200||rr.code>=300){sendJs("site-status",new Resp(rr.code,"{\"ok\":false,\"message\":\"No fue posible comprobar Sistema Halcón en esta dirección.\"}"));return;}
-          JSONObject st=new JSONObject(rr.body);
-          if(!st.optBoolean("ok",false)){sendJs("site-status",new Resp(409,"{\"ok\":false,\"message\":\"La dirección no corresponde a una instalación válida de Sistema Halcón.\"}"));return;}
-          boolean active=st.optBoolean("activationComplete",false)&&st.optBoolean("licenseActive",false);
-          android.content.SharedPreferences.Editor ed=getSharedPreferences(P,0).edit().remove("token").remove("activated_email").remove("control_token").remove("activation_code").remove("installation_id").remove("company_name").remove("company_domain").remove("license_key").putString("requested_site_url",normalized);
-          if(active)ed.putString("site_api",normalized+"/wp-json/halcon-app/v1/"); else ed.remove("site_api");
+          Uri target=Uri.parse(normalized);
+          String origin="https://"+String.valueOf(target.getHost()).toLowerCase(Locale.US);
+          String[] statusUrls=new String[]{
+            normalized+"/wp-json/halcon-app/v1/status",
+            origin+"/wp-json/halcon-app/v1/status",
+            normalized+"/?rest_route=/halcon-app/v1/status",
+            origin+"/?rest_route=/halcon-app/v1/status"
+          };
+          String[] apiBases=new String[]{
+            normalized+"/wp-json/halcon-app/v1/",
+            origin+"/wp-json/halcon-app/v1/",
+            normalized+"/?rest_route=/halcon-app/v1/",
+            origin+"/?rest_route=/halcon-app/v1/"
+          };
+          JSONObject st=null;String apiBase="";int lastCode=0;
+          for(int n=0;n<statusUrls.length;n++){
+            try{
+              Resp rr=http(statusUrls[n],"GET","","");lastCode=rr.code;
+              if(rr.code<200||rr.code>=300)continue;
+              JSONObject candidate=new JSONObject(rr.body);
+              if(!candidate.optBoolean("ok",false))continue;
+              st=candidate;apiBase=apiBases[n];break;
+            }catch(Exception ignored){}
+          }
+          if(st==null){sendJs("site-status",new Resp(lastCode==0?404:lastCode,"{\"ok\":false,\"message\":\"No fue posible comprobar Sistema Halcón en esta dirección. Revisa la dirección e intenta nuevamente.\"}"));return;}
+          boolean activationComplete=st.optBoolean("activationComplete",false);
+          android.content.SharedPreferences.Editor ed=getSharedPreferences(P,0).edit()
+            .remove("token").remove("activated_email").remove("control_token").remove("activation_code")
+            .remove("installation_id").remove("company_name").remove("company_domain").remove("license_key")
+            .putString("requested_site_url",normalized)
+            .putString("site_web_url",normalized);
+          if(activationComplete)ed.putString("site_api",apiBase); else ed.remove("site_api");
           ed.apply();
-          JSONObject out=new JSONObject();out.put("ok",true);out.put("siteUrl",normalized);out.put("activationComplete",st.optBoolean("activationComplete",false));out.put("licenseActive",st.optBoolean("licenseActive",false));out.put("company",st.optString("company",""));out.put("installationId",st.optString("installationId",""));
+          JSONObject out=new JSONObject();
+          out.put("ok",true);out.put("siteUrl",normalized);out.put("apiBase",apiBase);
+          out.put("activationComplete",activationComplete);out.put("licenseActive",st.optBoolean("licenseActive",false));
+          out.put("ready",st.optBoolean("ready",false));out.put("company",st.optString("company",""));
+          out.put("installationId",st.optString("installationId",""));
           sendJs("site-status",new Resp(200,out.toString()));
         }catch(Exception e){sendJs("site-status",new Resp(0,"{\"ok\":false,\"message\":\"No fue posible conectar con esta dirección.\"}"));}
       }}).start();
     }
+
     void activateCodeOnly(final String code){
       // Limpia por completo cualquier empresa anterior antes de validar otra licencia.
       getSharedPreferences(P,0).edit()
@@ -371,7 +401,7 @@ public class MainActivity extends Activity {
           act.put("email","");
           act.put("deviceId",getDeviceId());
           act.put("deviceName","Android");
-          act.put("appVersion","3.3.5");
+          act.put("appVersion","3.3.6");
           appendDiagnostic("activation_start","Validando licencia/codigo");
           Resp ar=http(MASTER+"activate","POST",act.toString(),"");
           appendDiagnostic("activation_http","HTTP "+ar.code+" / activate");
@@ -508,7 +538,7 @@ public class MainActivity extends Activity {
         String m=message==null?"":message;
         if(m.length()>1000)m=m.substring(0,1000);
         row.put("message",m);
-        row.put("appVersion","3.3.5");
+        row.put("appVersion","3.3.6");
         row.put("deviceId",new Bridge().getDeviceId());
         JSONArray out=new JSONArray();int from=Math.max(0,rows.length()-118);for(int i=from;i<rows.length();i++)out.put(rows.opt(i));out.put(row);
         pref.edit().putString(LOG_KEY,out.toString()).apply();
@@ -520,7 +550,7 @@ public class MainActivity extends Activity {
       try{
         android.content.SharedPreferences pref=getSharedPreferences(P,0);
         o.put("generatedAt",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ",Locale.US).format(new Date()));
-        o.put("appVersion","3.3.5");
+        o.put("appVersion","3.3.6");
         o.put("stage",stage==null?"":stage);
         o.put("deviceId",new Bridge().getDeviceId());
         o.put("requestedSiteUrl",pref.getString("requested_site_url",""));
@@ -594,7 +624,7 @@ public class MainActivity extends Activity {
           if(rr.code>=200&&rr.code<300){try{JSONObject m=new JSONObject(rr.body);out.put("messages",m.optJSONArray("messages")==null?new JSONArray():m.optJSONArray("messages"));}catch(Exception e){out.put("messages",new JSONArray());}}
           appendDiagnostic("control_refresh","modules="+mr.code+" messages="+rr.code);
           sendJs("control-refresh",new Resp(200,out.toString()));
-          JSONObject ping=new JSONObject();ping.put("appVersion","3.3.5");ping.put("deviceName","Android");
+          JSONObject ping=new JSONObject();ping.put("appVersion","3.3.6");ping.put("deviceName","Android");
           try{http(MASTER+"ping","POST",ping.toString(),control);}catch(Exception e){}
         }catch(Exception e){appendDiagnostic("control_refresh_error",e.getMessage()==null?"error":e.getMessage());}
       }}).start();
