@@ -36,4 +36,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete halcon-v3.3.6-build --yes --cleanup-tag || true
-          gh release create halcon-v3.3.5-build app/build/outputs/apk/release/Sistema-Halcon-v3.3.5-aligned-unsigned.apk --target "$GITHUB_SHA" --title "Sistema Halcon v3.3.6 build" --notes "Build técnico alineado para firma estable de Sistema Halcón." --prerelease
+          gh release create halcon-v3.3.6-build app/build/outputs/apk/release/Sistema-Halcon-v3.3.6-aligned-unsigned.apk --target "$GITHUB_SHA" --title "Sistema Halcon v3.3.6 build" --notes "Build técnico alineado para firma estable de Sistema Halcón." --prerelease
