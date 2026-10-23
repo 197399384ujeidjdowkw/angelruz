@@ -27,6 +27,20 @@ public class MainActivity extends Activity {
   HalconAlertRuntime halconAlerts;
   static final String MASTER="https://halconimpresiones.cl/wp-json/halcon-control/v3/app/";
   static final String P="halcon";
+  static final int HALCON_CREATE_DOCUMENT=50621;
+  final Object fileLock=new Object();
+  final java.util.Map<String,PendingFile> pendingFiles=new java.util.HashMap<>();
+  File legacyFile=null;
+  String legacyName="";
+  String legacyMime="";
+
+  static class PendingFile {
+    final File file;
+    final String name;
+    final String mime;
+    PendingFile(File f,String n,String m){file=f;name=n;mime=m;}
+  }
+
   static final String LOG_KEY="diagnostic_events";
   static final String PENDING_SHARES_KEY="pending_shares_v1";
 
@@ -57,6 +71,32 @@ public class MainActivity extends Activity {
     s.setMediaPlaybackRequiresUserGesture(false);
 
     w.addJavascriptInterface(new Bridge(),"HalconNative");
+    w.setWebChromeClient(new WebChromeClient(){
+      @Override public boolean onJsAlert(WebView view,String url,String message,JsResult result){
+        new AlertDialog.Builder(MainActivity.this).setTitle("Sistema Halcón")
+          .setMessage(message).setPositiveButton("Aceptar",(dialog,which)->result.confirm())
+          .setOnCancelListener(dialog->result.cancel()).show();
+        return true;
+      }
+      @Override public boolean onJsConfirm(WebView view,String url,String message,JsResult result){
+        new AlertDialog.Builder(MainActivity.this).setTitle("Sistema Halcón")
+          .setMessage(message).setNegativeButton("Cancelar",(dialog,which)->result.cancel())
+          .setPositiveButton("Aceptar",(dialog,which)->result.confirm())
+          .setOnCancelListener(dialog->result.cancel()).show();
+        return true;
+      }
+      @Override public boolean onJsPrompt(WebView view,String url,String message,String value,JsPromptResult result){
+        EditText field=new EditText(MainActivity.this);field.setSingleLine(true);field.setText(value==null?"":value);
+        new AlertDialog.Builder(MainActivity.this).setTitle("Sistema Halcón")
+          .setMessage(message).setView(field)
+          .setNegativeButton("Cancelar",(dialog,which)->result.cancel())
+          .setPositiveButton("Aceptar",(dialog,which)->result.confirm(field.getText().toString()))
+          .setOnCancelListener(dialog->result.cancel()).show();
+        return true;
+      }
+    });
+    w.setDownloadListener((url,userAgent,disposition,mime,length)->downloadHttpFile(url,userAgent,disposition,mime));
+
     halconAlerts=HalconAlertRuntime.attach(this,w);
 
     LinearLayout loading=new LinearLayout(this);
@@ -272,6 +312,11 @@ public class MainActivity extends Activity {
     @JavascriptInterface public void help(String email){ centralPost("help",email); }
     @JavascriptInterface public void openSupport(int index){ openSupportContact(index); }
     @JavascriptInterface public void save(String raw){api("quotes",raw,true);}
+    @JavascriptInterface public String beginFileDownload(String name,String mime){return beginNativeFile(name,mime);}
+    @JavascriptInterface public String appendFileChunk(String id,String base64){return appendNativeFile(id,base64);}
+    @JavascriptInterface public String finishFileDownload(String id){return finishNativeFile(id);}
+    @JavascriptInterface public void cancelFileDownload(String id){cancelNativeFile(id);}
+
     @JavascriptInterface public void logEvent(String type,String message){appendDiagnostic(type,message);}
     @JavascriptInterface public void downloadDiagnostic(String stage){downloadDiagnosticFile(stage);}
     @JavascriptInterface public void sendDiagnostic(String stage){sendDiagnosticNative(stage);}
@@ -401,7 +446,7 @@ public class MainActivity extends Activity {
           act.put("email","");
           act.put("deviceId",getDeviceId());
           act.put("deviceName","Android");
-          act.put("appVersion","3.3.6");
+          act.put("appVersion","3.3.7");
           appendDiagnostic("activation_start","Validando licencia/codigo");
           Resp ar=http(MASTER+"activate","POST",act.toString(),"");
           appendDiagnostic("activation_http","HTTP "+ar.code+" / activate");
@@ -538,7 +583,7 @@ public class MainActivity extends Activity {
         String m=message==null?"":message;
         if(m.length()>1000)m=m.substring(0,1000);
         row.put("message",m);
-        row.put("appVersion","3.3.6");
+        row.put("appVersion","3.3.7");
         row.put("deviceId",new Bridge().getDeviceId());
         JSONArray out=new JSONArray();int from=Math.max(0,rows.length()-118);for(int i=from;i<rows.length();i++)out.put(rows.opt(i));out.put(row);
         pref.edit().putString(LOG_KEY,out.toString()).apply();
@@ -550,7 +595,7 @@ public class MainActivity extends Activity {
       try{
         android.content.SharedPreferences pref=getSharedPreferences(P,0);
         o.put("generatedAt",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ",Locale.US).format(new Date()));
-        o.put("appVersion","3.3.6");
+        o.put("appVersion","3.3.7");
         o.put("stage",stage==null?"":stage);
         o.put("deviceId",new Bridge().getDeviceId());
         o.put("requestedSiteUrl",pref.getString("requested_site_url",""));
@@ -624,7 +669,7 @@ public class MainActivity extends Activity {
           if(rr.code>=200&&rr.code<300){try{JSONObject m=new JSONObject(rr.body);out.put("messages",m.optJSONArray("messages")==null?new JSONArray():m.optJSONArray("messages"));}catch(Exception e){out.put("messages",new JSONArray());}}
           appendDiagnostic("control_refresh","modules="+mr.code+" messages="+rr.code);
           sendJs("control-refresh",new Resp(200,out.toString()));
-          JSONObject ping=new JSONObject();ping.put("appVersion","3.3.6");ping.put("deviceName","Android");
+          JSONObject ping=new JSONObject();ping.put("appVersion","3.3.7");ping.put("deviceName","Android");
           try{http(MASTER+"ping","POST",ping.toString(),control);}catch(Exception e){}
         }catch(Exception e){appendDiagnostic("control_refresh_error",e.getMessage()==null?"error":e.getMessage());}
       }}).start();
@@ -739,6 +784,199 @@ public class MainActivity extends Activity {
   String q(String s){
     if(s==null)s="";
     return JSONObject.quote(s);
+  }
+
+
+  String fileExtension(String mime){
+    if("application/pdf".equals(mime))return ".pdf";
+    if("image/jpeg".equals(mime))return ".jpg";
+    if("image/png".equals(mime))return ".png";
+    if("image/webp".equals(mime))return ".webp";
+    if("image/svg+xml".equals(mime))return ".svg";
+    if("text/plain".equals(mime))return ".txt";
+    if("application/json".equals(mime))return ".json";
+    return "";
+  }
+
+  String cleanFileName(String raw,String mime){
+    String name=(raw==null?"":raw).replaceAll("[^\\p{L}\\p{N}._ -]","_").trim();
+    if(name.isEmpty())name="Documento-Halcon";
+    if(name.length()>110)name=name.substring(0,110);
+    String ext=fileExtension(mime);
+    if(!name.toLowerCase(Locale.ROOT).endsWith(ext))name+=ext;
+    return name;
+  }
+
+  boolean trustedDocumentForDownload(){
+    final String[] current={""};
+    final java.util.concurrent.CountDownLatch latch=new java.util.concurrent.CountDownLatch(1);
+    w.post(()->{try{current[0]=w.getUrl();}catch(Exception ignored){}finally{latch.countDown();}});
+    try{if(!latch.await(4,java.util.concurrent.TimeUnit.SECONDS))return false;}catch(InterruptedException e){Thread.currentThread().interrupt();return false;}
+    String site=getSharedPreferences(P,0).getString("site_web_url","");
+    if(site.isEmpty())site=getSharedPreferences(P,0).getString("requested_site_url","");
+    try{
+      Uri loaded=Uri.parse(current[0]),expected=Uri.parse(site);
+      return "https".equalsIgnoreCase(loaded.getScheme()) &&
+        loaded.getHost()!=null && loaded.getHost().equalsIgnoreCase(expected.getHost());
+    }catch(Exception e){return false;}
+  }
+
+  String beginNativeFile(String rawName,String rawMime){
+    String mime=rawMime==null?"":rawMime.trim().toLowerCase(Locale.ROOT);
+    if("image/jpg".equals(mime))mime="image/jpeg";
+    if(fileExtension(mime).isEmpty())return "error: Formato de descarga no autorizado.";
+    if(!trustedDocumentForDownload())return "error: Esta pantalla no está autorizada para descargar archivos.";
+    synchronized(fileLock){
+      if(!pendingFiles.isEmpty())return "error: Espere a terminar la descarga anterior.";
+      try{
+        String id=java.util.UUID.randomUUID().toString();
+        File file=File.createTempFile("halcon_download_",".part",getCacheDir());
+        pendingFiles.put(id,new PendingFile(file,cleanFileName(rawName,mime),mime));
+        return id;
+      }catch(Exception e){return "error: No se pudo preparar la descarga.";}
+    }
+  }
+
+  String appendNativeFile(String id,String chunk){
+    synchronized(fileLock){
+      PendingFile p=pendingFiles.get(id);
+      if(p==null)return "error: Descarga desconocida.";
+      try{
+        if(chunk==null||chunk.isEmpty()||chunk.length()>700000)throw new IOException("Bloque inválido");
+        byte[] bytes=android.util.Base64.decode(chunk,android.util.Base64.DEFAULT);
+        if(p.file.length()+bytes.length>150L*1024L*1024L)throw new IOException("Archivo mayor que 150 MB");
+        try(FileOutputStream out=new FileOutputStream(p.file,true)){out.write(bytes);}
+        return "ok";
+      }catch(Exception e){pendingFiles.remove(id);p.file.delete();return "error: "+e.getMessage();}
+    }
+  }
+
+  String finishNativeFile(String id){
+    final PendingFile p;
+    synchronized(fileLock){p=pendingFiles.remove(id);}
+    if(p==null)return "error: Descarga desconocida.";
+    if(p.file.length()<12){p.file.delete();return "error: Archivo vacío o incompleto.";}
+    new Thread(()->{
+      try{
+        if(!checkFileSignature(p.file,p.mime))throw new IOException("El archivo generado no coincide con su formato.");
+        if(Build.VERSION.SDK_INT>=29){
+          ContentValues values=new ContentValues();
+          values.put(MediaStore.Downloads.DISPLAY_NAME,p.name);
+          values.put(MediaStore.Downloads.MIME_TYPE,p.mime);
+          values.put(MediaStore.Downloads.RELATIVE_PATH,"Download/Sistema Halcon");
+          values.put(MediaStore.Downloads.IS_PENDING,1);
+          Uri target=getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);
+          if(target==null)throw new IOException("Android no pudo crear el documento.");
+          try{
+            try(InputStream in=new FileInputStream(p.file);OutputStream out=getContentResolver().openOutputStream(target)){
+              if(out==null)throw new IOException("Android no pudo abrir Descargas.");
+              byte[] buffer=new byte[65536];int len;
+              while((len=in.read(buffer))!=-1)out.write(buffer,0,len);
+              out.flush();
+            }
+            ContentValues ready=new ContentValues();ready.put(MediaStore.Downloads.IS_PENDING,0);
+            getContentResolver().update(target,ready,null,null);
+            notifyFileDownload(true,p.name,"Archivo guardado en Descargas / Sistema Halcón.");
+          }catch(Exception e){getContentResolver().delete(target,null,null);throw e;}
+          finally{p.file.delete();}
+        }else{
+          runOnUiThread(()->{
+            if(legacyFile!=null){p.file.delete();notifyFileDownload(false,p.name,"Hay una descarga pendiente. Termine la anterior.");return;}
+            legacyFile=p.file;legacyName=p.name;legacyMime=p.mime;
+            Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType(p.mime);
+            intent.putExtra(Intent.EXTRA_TITLE,p.name);
+            try{startActivityForResult(intent,HALCON_CREATE_DOCUMENT);}
+            catch(Exception e){legacyFile=null;p.file.delete();notifyFileDownload(false,p.name,"No fue posible abrir el selector de archivos.");}
+          });
+        }
+      }catch(Exception e){p.file.delete();notifyFileDownload(false,p.name,"No fue posible descargar el archivo: "+e.getMessage());}
+    }).start();
+    return "queued";
+  }
+
+  void cancelNativeFile(String id){
+    synchronized(fileLock){
+      PendingFile p=pendingFiles.remove(id);
+      if(p!=null)p.file.delete();
+    }
+  }
+
+  boolean checkFileSignature(File file,String mime)throws IOException{
+    byte[] bytes=new byte[12];int n;
+    try(FileInputStream in=new FileInputStream(file)){n=in.read(bytes);}
+    if(n<4)return false;
+    if("application/pdf".equals(mime))return bytes[0]=='%'&&bytes[1]=='P'&&bytes[2]=='D'&&bytes[3]=='F';
+    if("image/jpeg".equals(mime))return (bytes[0]&255)==255&&(bytes[1]&255)==216;
+    if("image/png".equals(mime))return (bytes[0]&255)==137&&bytes[1]=='P'&&bytes[2]=='N'&&bytes[3]=='G';
+    if("image/webp".equals(mime))return bytes[0]=='R'&&bytes[1]=='I'&&bytes[2]=='F'&&bytes[3]=='F';
+    return true;
+  }
+
+  void notifyFileDownload(boolean ok,String name,String message){
+    runOnUiThread(()->{
+      Toast.makeText(MainActivity.this,message,Toast.LENGTH_LONG).show();
+      if(w!=null){
+        String js="window.dispatchEvent(new CustomEvent('halcon-native-download',{detail:{ok:"+ok+
+          ",name:"+JSONObject.quote(name)+",message:"+JSONObject.quote(message)+"}}));";
+        w.evaluateJavascript(js,null);
+      }
+    });
+  }
+
+  void downloadHttpFile(String url,String userAgent,String disposition,String mime){
+    try{
+      Uri target=Uri.parse(url);
+      String site=getSharedPreferences(P,0).getString("site_web_url","");
+      if(site.isEmpty())site=getSharedPreferences(P,0).getString("requested_site_url","");
+      Uri expected=Uri.parse(site);
+      if(!"https".equalsIgnoreCase(target.getScheme())||target.getHost()==null||
+        !target.getHost().equalsIgnoreCase(expected.getHost()))throw new IOException("Enlace de descarga no autorizado.");
+      String fileName=WebUtilsFileName(url,disposition,mime);
+      DownloadManager.Request req=new DownloadManager.Request(target);
+      String cookie=CookieManager.getInstance().getCookie(url);
+      if(cookie!=null&&!cookie.isEmpty())req.addRequestHeader("Cookie",cookie);
+      if(userAgent!=null&&!userAgent.isEmpty())req.addRequestHeader("User-Agent",userAgent);
+      req.setTitle(fileName);
+      req.setDescription("Sistema Halcón");
+      req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+      req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,"Sistema Halcon/"+fileName);
+      DownloadManager dm=(DownloadManager)getSystemService(DOWNLOAD_SERVICE);
+      dm.enqueue(req);
+      Toast.makeText(this,"Descargando archivo…",Toast.LENGTH_SHORT).show();
+    }catch(Exception e){notifyFileDownload(false,"Archivo",e.getMessage()==null?"Descarga no disponible.":e.getMessage());}
+  }
+
+  String WebUtilsFileName(String url,String disposition,String mime){
+    String suggested=URLUtil.guessFileName(url,disposition,mime);
+    String extension=fileExtension(mime==null?"":mime.toLowerCase(Locale.ROOT));
+    String name=(suggested==null?"Archivo":suggested).replaceAll("[^\\p{L}\\p{N}._ -]","_");
+    if(name.isEmpty())name="Archivo";
+    if(name.length()>110)name=name.substring(0,110);
+    if(!extension.isEmpty()&&!name.toLowerCase(Locale.ROOT).endsWith(extension))name+=extension;
+    return name;
+  }
+
+  @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
+    super.onActivityResult(requestCode,resultCode,data);
+    if(requestCode!=HALCON_CREATE_DOCUMENT)return;
+    File file=legacyFile;String name=legacyName;
+    legacyFile=null;legacyName="";legacyMime="";
+    if(file==null)return;
+    try{
+      if(resultCode!=RESULT_OK||data==null||data.getData()==null){
+        notifyFileDownload(false,name,"Se canceló la descarga.");return;
+      }
+      try(InputStream in=new FileInputStream(file);OutputStream out=getContentResolver().openOutputStream(data.getData())){
+        if(out==null)throw new IOException("No se pudo abrir el documento.");
+        byte[] bytes=new byte[65536];int len;
+        while((len=in.read(bytes))!=-1)out.write(bytes,0,len);
+        out.flush();
+      }
+      notifyFileDownload(true,name,"Archivo guardado correctamente.");
+    }catch(Exception e){notifyFileDownload(false,name,"No se pudo guardar el archivo.");}
+    finally{file.delete();}
   }
 
   @Override public void onBackPressed(){
