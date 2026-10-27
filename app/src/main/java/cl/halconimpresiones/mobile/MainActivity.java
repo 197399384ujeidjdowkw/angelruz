@@ -49,7 +49,7 @@ public class MainActivity extends Activity {
 
     root=new FrameLayout(this);
     root.setBackgroundColor(Color.WHITE);
-    getWindow().setStatusBarColor(Color.rgb(112,72,184));
+    getWindow().setStatusBarColor(Color.rgb(118,22,193));
     getWindow().setNavigationBarColor(Color.rgb(243,244,247));
     if(Build.VERSION.SDK_INT>=30){
       root.setOnApplyWindowInsetsListener((v,insets)->{
@@ -69,9 +69,27 @@ public class MainActivity extends Activity {
     s.setAllowFileAccess(true);
     s.setAllowContentAccess(true);
     s.setMediaPlaybackRequiresUserGesture(false);
+    s.setSupportMultipleWindows(true);
+    s.setJavaScriptCanOpenWindowsAutomatically(true);
 
     w.addJavascriptInterface(new Bridge(),"HalconNative");
     w.setWebChromeClient(new WebChromeClient(){
+      @Override public boolean onCreateWindow(WebView view,boolean isDialog,boolean isUserGesture,Message resultMsg){
+        if(!isUserGesture)return false;
+        final WebView popup=new WebView(MainActivity.this);
+        popup.setWebViewClient(new WebViewClient(){
+          @Override public boolean shouldOverrideUrlLoading(WebView child,WebResourceRequest req){
+            openDestinationFromWeb(req.getUrl());
+            child.postDelayed(()->{try{child.destroy();}catch(Exception ignored){}},300);
+            return true;
+          }
+        });
+        WebView.WebViewTransport transport=(WebView.WebViewTransport)resultMsg.obj;
+        transport.setWebView(popup);
+        resultMsg.sendToTarget();
+        return true;
+      }
+
       @Override public boolean onJsAlert(WebView view,String url,String message,JsResult result){
         new AlertDialog.Builder(MainActivity.this).setTitle("Sistema Halcón")
           .setMessage(message).setPositiveButton("Aceptar",(dialog,which)->result.confirm())
@@ -171,12 +189,27 @@ public class MainActivity extends Activity {
           try{startActivity(new Intent(Intent.ACTION_VIEW,u));}catch(Exception e){}
           return true;
         }
+        if("mailto".equals(scheme)||"tel".equals(scheme)) {openDestinationFromWeb(u);return true;}
         return false;
       }
     });
 
     w.loadUrl("file:///android_asset/index.html");
     handle(getIntent());
+  }
+
+  void openDestinationFromWeb(Uri destination){
+    if(destination==null)return;
+    String scheme=destination.getScheme()==null?"":destination.getScheme().toLowerCase(Locale.US);
+    if(!("http".equals(scheme)||"https".equals(scheme)||"whatsapp".equals(scheme)||"tel".equals(scheme)||"mailto".equals(scheme)))return;
+    if("http".equals(scheme)||"https".equals(scheme)){
+      String siteHost="";
+      try{Uri site=Uri.parse(getSharedPreferences(P,0).getString("site_web_url",""));siteHost=site.getHost()==null?"":site.getHost().toLowerCase(Locale.US);}catch(Exception ignored){}
+      String host=destination.getHost()==null?"":destination.getHost().toLowerCase(Locale.US);
+      if(!siteHost.isEmpty()&&siteHost.equals(host)){w.post(()->w.loadUrl(destination.toString()));return;}
+    }
+    try{Intent intent=new Intent(Intent.ACTION_VIEW,destination);startActivity(intent);}
+    catch(Exception e){runOnUiThread(()->Toast.makeText(this,"No hay aplicación disponible para abrir el enlace.",Toast.LENGTH_LONG).show());}
   }
 
   void showNativeError(String message){
