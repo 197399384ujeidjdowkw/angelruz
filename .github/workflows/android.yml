@@ -41,8 +41,10 @@ jobs:
           "$APKSIGNER" sign --ks "$KEYSTORE" --ks-type PKCS12 --ks-pass env:HALCON_RELEASE_STORE_PASSWORD --ks-key-alias "$HALCON_RELEASE_KEY_ALIAS" --key-pass env:HALCON_RELEASE_KEY_PASSWORD --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out app/build/outputs/apk/release/Sistema-Halcon-v3.3.7-INSTALABLE.apk app/build/outputs/apk/release/Sistema-Halcon-v3.3.7-aligned-unsigned.apk
           "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/release/Sistema-Halcon-v3.3.7-INSTALABLE.apk
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: sistema-halcon-apk-builds
           path: |
             app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/Sistema-Halcon-v3.3.7-aligned-unsigned.apk
             app/build/outputs/apk/release/Sistema-Halcon-v3.3.7-INSTALABLE.apk
