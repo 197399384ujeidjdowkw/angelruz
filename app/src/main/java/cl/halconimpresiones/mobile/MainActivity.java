@@ -52,6 +52,7 @@ public class MainActivity extends Activity {
     getWindow().setStatusBarColor(Color.rgb(118,22,193));
     getWindow().setNavigationBarColor(Color.rgb(243,244,247));
     if(Build.VERSION.SDK_INT>=30){
+      getWindow().setDecorFitsSystemWindows(false);
       root.setOnApplyWindowInsetsListener((v,insets)->{
         android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());
         v.setPadding(0,bars.top,0,bars.bottom);
@@ -968,7 +969,7 @@ public class MainActivity extends Activity {
         !target.getHost().equalsIgnoreCase(expected.getHost()))throw new IOException("Enlace de descarga no autorizado.");
       String fileName=WebUtilsFileName(url,disposition,mime);
       DownloadManager.Request req=new DownloadManager.Request(target);
-      String cookie=CookieManager.getInstance().getCookie(url);
+      String cookie=android.webkit.CookieManager.getInstance().getCookie(url);
       if(cookie!=null&&!cookie.isEmpty())req.addRequestHeader("Cookie",cookie);
       if(userAgent!=null&&!userAgent.isEmpty())req.addRequestHeader("User-Agent",userAgent);
       req.setTitle(fileName);
